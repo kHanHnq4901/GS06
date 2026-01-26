@@ -1,0 +1,13 @@
+{
+	"folders": [
+		{
+			"name": "SafeFire",
+			"path": "."
+		},
+		{
+			"name": "src",
+			"path": "../../Downloads/src"
+		}
+	],
+	"settings": {}
+}

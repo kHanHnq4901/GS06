@@ -12,10 +12,20 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        classpath("com.android.tools.build:gradle")
+        // Lưu ý: Dòng này thường cần phiên bản cụ thể. 
+        // Nếu project gốc của bạn có version (ví dụ: :8.1.1) thì hãy giữ nguyên version đó.
+        classpath("com.android.tools.build:gradle") 
+        
         classpath("com.facebook.react:react-native-gradle-plugin")
-        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin")
+        
+        // Sửa lại dòng này để nhận biến kotlinVersion đã khai báo ở trên
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion")
+        
+        // GIỮ LẠI DÒNG NÀY (Xóa đoạn plugins ở cuối file đi)
+        classpath('com.google.gms:google-services:4.4.2') 
     }
 }
 
 apply plugin: "com.facebook.react.rootproject"
+
+// --- ĐÃ XÓA KHỐI PLUGINS { ... } Ở ĐÂY ĐỂ TRÁNH XUNG ĐỘT ---
