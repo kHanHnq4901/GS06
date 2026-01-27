@@ -1,296 +1,204 @@
-import Geolocation from '@react-native-community/geolocation';
-import React, { useContext, useEffect, useState } from 'react';
-import { EmitterSubscription, EventSubscription, NativeEventEmitter, NativeModules, Platform } from 'react-native';
-import * as permission from 'react-native-permissions';
-import {
-  requestBluetoothPermissions,
-  requestPermissionBleConnectAndroid,
-  requestPermissionGPSAndroid,
-  requestPermissionGPSIos,
-  requestPermissionScan,
-} from '../../service/permission';
-import { PropsStore, storeContext } from '../../store';
-import BleManager from 'react-native-ble-manager';
-import { onScanPress } from './handleButton';
-import { showAlert, showToast } from '../../util';
-import { StackNavigationProp } from '@react-navigation/stack';
-import { StackRootParamsList } from '../../navigation/model/model';
-import RNAndroidLocationEnabler from 'react-native-android-location-enabler';
-import {
-  connectLatestBLE,
-  handleUpdateValueForCharacteristic as hhuHandleReceiveData,
-  initModuleBle,
-} from '../../service/hhu/bleHhuFunc';
-import { ObjSend } from '../../service/hhu/hhuFunc';
-  let hhuDiscoverPeripheral: EventSubscription | null= null;
-  let hhuDisconnectListener: EventSubscription | null = null;
-  let hhuReceiveDataListener: EventSubscription | null = null;
-export type PropsItemBle = {
-  isConnectable?: boolean;
-  name: string;
-  id: string;
-  rssi?: number;
-};
+import { useState, useEffect, useRef } from 'react';
+import { Alert, EmitterSubscription, Platform } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import { BleProtocol } from '../../gateway/ble'; // Đảm bảo đường dẫn đúng
 
-type PropsBLE = {
-  isScan: boolean;
+export enum Step {
+  SCAN_BLE = 1,      
+  CONNECTING_BLE = 2,
+  SCAN_WIFI = 3,     
+  SELECT_WIFI = 4,   
+  CONFIGURING = 5,   
+  SUCCESS = 6        
+}
 
-  listBondedDevice: PropsItemBle[];
-  listNewDevice: { name: string; id: string; rssi: number }[];
-  // idConnected: string | null;
-};
+// Khai báo các biến quản lý listener theo ý bạn
+let hhuDiscoverPeripheral: EmitterSubscription | null = null;
+let hhuDisconnectListener: EmitterSubscription | null = null;
+let hhuReceiveDataListener: EmitterSubscription | null = null;
+let hhuStopScanListener: EmitterSubscription | null = null;
 
-export type HookState = {
-  status: string;
-  ble: PropsBLE;
-};
+export const useConfigDeviceController = () => {
+  const navigation = useNavigation();
 
-export type HookProps = {
-  state: HookState;
-  setState: React.Dispatch<React.SetStateAction<HookState>>;
-};
+  // --- STATE ---
+  const [currentStep, setCurrentStep] = useState<Step>(Step.SCAN_BLE);
+  const [isScanningBle, setIsScanningBle] = useState(false);
+  const [bleDevices, setBleDevices] = useState<any[]>([]);
+  const [wifiList, setWifiList] = useState<any[]>([]);
+  
+  const [modalVisible, setModalVisible] = useState(false);
+  const [selectedSsid, setSelectedSsid] = useState('');
+  const [password, setPassword] = useState('');
 
-const TAG = 'Ble Controller: ';
+  // Ref lưu giữ ID thiết bị đang kết nối để dọn dẹp
+  const connectedIdRef = useRef<string | null>(null);
 
-export const hookProps = {} as HookProps;
-
-export let store = {} as PropsStore;
-
-
-const BleManagerModule = NativeModules.BleManager;
-
-let enableLocationHook = {} as {
-  enabled: any;
-  requestResolution: () => void;
-};
-
-export const requestGps = async (): Promise<boolean> => {
-  if (Platform.OS === 'ios') {
-    return true;
-  }
-  try {
-    const value = await turnOnLocation();
-    if (value === true) {
-      if (Platform.OS === 'android') {
-        if (enableLocationHook.enabled !== true) {
-          enableLocationHook.requestResolution();
-          return true;
-        } else {
-        }
-      }
-
-      return true;
-    }
-    if (value === false) {
-      setStatus('Bật GPS cho chức năng tìm kiếm thiết bị Bluetooth');
-    }
-  } catch (err :any) {
-    setStatus('Lỗi: ' + err.message);
-  }
-
-  return false;
-};
-
-export const GetHookProps = (): HookProps => {
-  const [state, setState] = useState<HookState>({
-    status: '',
-    ble: {
-      isScan: false,
-      listBondedDevice: [],
-      listNewDevice: [],
-    },
-  });
-  hookProps.state = state;
-  hookProps.setState = setState;
-
-  store = useContext(storeContext) as PropsStore;
-
-
-  return hookProps;
-};
-
-const handleStopScan = async () => {
-  console.log('event stop scan');
-
-  hookProps.setState(state => {
-    state.ble.isScan = false;
-    return { ...state };
-  });
-  // const ret = await BleManager.getDiscoveredPeripherals([]);
-  // console.log('ret:', ret);
-};
-
-export const setStatus = (status: string) => {
-  hookProps.setState(state => {
-    state.status = status;
-    return { ...state };
-  });
-};
-
-const handleDidUpdateState = (obj: { state: any; }) => {
-  console.log('handleDidUpdateState:', obj.state);
-  // const state = obj.state;
-  // if (state === 'on') {
-  //   console.log('state:', state);
-  //   BleManager.scan([], 15, false)
-  //     .then(() => {
-  //       hookProps.setState(state => {
-  //         state.ble.isScan = true;
-  //         return { ...state };
-  //       });
-  //     })
-  //     .catch(resFail => {
-  //       console.log('fail: ', resFail);
-  //     });
-  // }
-};
-export const hhuHandleDisconnectedPeripheral = async (data: any) => {
-  store.setState(state => {
-    state.hhu.name = '';
-    state.hhu.idConnected = '';
-    state.hhu.connect = 'DISCONNECTED';
-    return { ...state };
-  });
-  console.log (store.state.hhu.connect)
-  ObjSend.id = null;
-  showToast('Thiết bị đã ngắt kết nối')
-};
-const handleDiscoverPeripheral = (peripheral: any) => {
-  const connectedId = store?.state.hhu.idConnected;
-
-  // Tạo Map từ list hiện tại
-  const peripherals = new Map(
-    hookProps.state.ble.listNewDevice.map(itm => [itm.id, itm])
-  );
-
-  let res = peripheral as {
-    advertising: {
-      isConnectable: boolean;
-      manufacturerData: any;
-      serviceData: any;
-      serviceUUIDs: [];
-      txPowerLevel: number;
+  // --- LIFECYCLE & LISTENERS ---
+  useEffect(() => {
+    const initBle = async () => {
+        await BleProtocol.init();
+        await startScanProcess();
     };
-    id: string;
-    name: null | string;
-    rssi: number;
-  };
+    initBle();
 
-  // Bỏ qua nếu là thiết bị đang connect
-  if (res.id === connectedId) {
-    return;
-  }
-
-  // Chỉ lưu thiết bị có tên & có thể kết nối
-  if (res.name && res.advertising?.isConnectable) {
-    peripherals.set(res.id, {
-      name: res.name,
-      id: res.id,
-      rssi: res.rssi
+    // 1. Gán sự kiện cho các biến hhu...
+    hhuDiscoverPeripheral = BleProtocol.addScanListener((peripheral) => {
+        // Chỉ lấy thiết bị có tên (thường là gateway của bạn)
+        if (!peripheral.name || peripheral.name === 'N/A') return;
+        
+        setBleDevices(prev => {
+            if (prev.find(p => p.id === peripheral.id)) return prev;
+            return [...prev, peripheral];
+        });
     });
 
-    hookProps.setState(state => {
-      state.ble.listNewDevice = Array.from(peripherals.values());
-      return { ...state };
+    hhuStopScanListener = BleProtocol.addStopScanListener(() => {
+        setIsScanningBle(false);
+        console.log("BLE Scan Stopped");
     });
-  }
-};
 
-
-export const onInit = async (navigation: StackNavigationProp<StackRootParamsList>) => {
-  try {
-    // Cấu hình GPS
-    Geolocation.setRNConfiguration({
-      skipPermissionRequests: false,
-      authorizationLevel: 'whenInUse',
-      locationProvider: 'playServices',
+    hhuReceiveDataListener = BleProtocol.addDataListener((res) => {
+        processDeviceResponse(res);
     });
-    Geolocation.requestAuthorization();
 
-    // Xin quyền Bluetooth
-    const requestScanPermission = await requestBluetoothPermissions();
-    if (requestScanPermission) {
-      if (Platform.OS === 'android') {
-        await BleManager.start({ showAlert: false });
-      }
-
-      try {
-        await BleManager.enableBluetooth(); // Không throw nghĩa là đã bật Bluetooth
-
-        if (Platform.OS === 'android') {
-          const list = await BleManager.getBondedPeripherals();
-          hookProps.setState(state => {
-            state.ble.listBondedDevice = list.map(item => ({
-              id: item.id,
-              isConnectable: item.advertising?.isConnectable ?? false,
-              name: item.name ?? '',
-            }));
-            return { ...state };
-          });
+    hhuDisconnectListener = BleProtocol.addDisconnectListener((res) => {
+        console.log("Device disconnected:", res.peripheral);
+        if (currentStep !== Step.SUCCESS) {
+            Alert.alert("Mất kết nối", "Thiết bị đã ngắt kết nối đột ngột.");
+            setCurrentStep(Step.SCAN_BLE);
         }
-      } catch {
-        showAlert('Thiết bị cần được bật bluetooth');
-      }
+    });
+
+    // 2. CLEANUP: Hủy toàn bộ khi thoát màn hình
+    return () => {
+        hhuDiscoverPeripheral?.remove();
+        hhuStopScanListener?.remove();
+        hhuReceiveDataListener?.remove();
+        hhuDisconnectListener?.remove();
+        
+        // Đặt lại giá trị null
+        hhuDiscoverPeripheral = null;
+        hhuStopScanListener = null;
+        hhuReceiveDataListener = null;
+        hhuDisconnectListener = null;
+
+        if (connectedIdRef.current) {
+            BleProtocol.disconnect(connectedIdRef.current);
+        }
+        BleProtocol.stopScan();
+    };
+  }, []);
+
+  // --- LOGIC FUNCTIONS ---
+
+  const startScanProcess = async () => {
+    await BleProtocol.requestPermissions();
+    setBleDevices([]);
+    setIsScanningBle(true);
+    setCurrentStep(Step.SCAN_BLE);
+    
+    try {
+        await BleProtocol.scanDevices();
+        // Tự động dừng scan sau 5 giây nếu không có StopScanListener gọi
+        setTimeout(async () => {
+            await BleProtocol.stopScan();
+            setIsScanningBle(false);
+        }, 5000);
+    } catch (err) {
+        console.error("Scan error", err);
+        setIsScanningBle(false);
     }
-
-     // 🔌 Setup BLE event listeners — đảm bảo chỉ 1 lần
-      if (!hhuDiscoverPeripheral) {
-        hhuDiscoverPeripheral = BleManager.onDiscoverPeripheral(
-          handleDiscoverPeripheral
-        );
-      }
-
-      if (!hhuReceiveDataListener) {
-        hhuReceiveDataListener = BleManager.onDidUpdateValueForCharacteristic(
-          hhuHandleReceiveData
-        );
-      }
-
-      if (!hhuDisconnectListener) {
-        hhuDisconnectListener = BleManager.onDisconnectPeripheral(
-          hhuHandleDisconnectedPeripheral
-        );
-      }
-    BleManager.onStopScan(handleStopScan);
-
-    // BleManager.onDisconnectPeripheral((data: { peripheral: any; }) => {
-    //   console.log('Peripheral disconnected:', data.peripheral);
-    // });
-    setStatus('');
-  } catch (err: any) {
-    setStatus('Lỗi: ' + err.message);
-  }
-};
-
-export const onDeInit = () => {
-
-};
-
-
-type PropsListBondBle = {
-  advertising: {
-    isConnectable?: boolean;
-    localName?: string;
-    manufacturerData?: any;
   };
-  id: string;
-  name: string;
-  rssi: 0;
-};
-export const turnOnLocation = async (
-  requestBle?: boolean,
-): Promise<boolean> => {
-  let ok: boolean = false;
 
-  let result: permission.PermissionStatus = 'denied';
+  const connectToDevice = async (peripheralId: string) => {
+    await BleProtocol.stopScan();
+    setIsScanningBle(false);
+    setCurrentStep(Step.CONNECTING_BLE);
+    
+    try {
+        await BleProtocol.connectAndPrepare(peripheralId);
+        connectedIdRef.current = peripheralId;
+        
+        // Sau khi kết nối thành công, yêu cầu thiết bị quét WiFi xung quanh nó
+        setCurrentStep(Step.SCAN_WIFI);
+        setTimeout(async () => {
+            await BleProtocol.requestWifiScan(peripheralId);
+        }, 1000); // Đợi 1s để MTU và Service ổn định
 
-  if (Platform.OS === 'ios') {
-    return await requestPermissionGPSIos();
-  } else {
-    if (requestBle !== false) {
-      ok = await requestPermissionBleConnectAndroid();
+    } catch (error) {
+        console.error("Connect error:", error);
+        Alert.alert("Lỗi", "Không thể kết nối với thiết bị này.");
+        setCurrentStep(Step.SCAN_BLE);
     }
-    ok = await requestPermissionGPSAndroid();
-    return ok;
-  }
+  };
+
+  const processDeviceResponse = (res: any) => {
+      console.log("[Controller] Response nhận được:", res);
+      
+      switch (res.type) {
+          case 'scan_resp': 
+              if (res.data && res.data.aps) {
+                  // Sắp xếp wifi theo tín hiệu mạnh nhất (RSSI)
+                  const sortedWifi = res.data.aps.sort((a: any, b: any) => b.rssi - a.rssi);
+                  setWifiList(sortedWifi);
+                  setCurrentStep(Step.SELECT_WIFI);
+              }
+              break;
+
+          case 'wifi_result': 
+              if (res.data && res.data.result === 'success') {
+                  setCurrentStep(Step.SUCCESS);
+                  Alert.alert("Thành công", "Thiết bị đã được cấu hình WiFi!", [
+                      { text: "Hoàn tất", onPress: () => navigation.goBack() }
+                  ]);
+              } else {
+                  const reason = res.data?.reason || "Sai mật khẩu hoặc WiFi lỗi";
+                  Alert.alert("Thất bại", `Cấu hình không thành công: ${reason}`);
+                  setCurrentStep(Step.SELECT_WIFI);
+              }
+              break;
+      }
+  };
+
+  const onWifiSelect = (ssid: string) => {
+      setSelectedSsid(ssid);
+      setPassword(''); // Reset pass mỗi lần chọn wifi mới
+      setModalVisible(true);
+  };
+
+  const onSubmitConfig = async () => {
+      if (!connectedIdRef.current) return;
+      
+      if (password.length < 8) {
+          Alert.alert("Thông báo", "Mật khẩu WiFi phải từ 8 ký tự trở lên.");
+          return;
+      }
+
+      setModalVisible(false);
+      setCurrentStep(Step.CONFIGURING);
+      
+      try {
+          await BleProtocol.sendWifiConfig(connectedIdRef.current, selectedSsid, password);
+      } catch (e) {
+          Alert.alert("Lỗi", "Không thể gửi dữ liệu cấu hình.");
+          setCurrentStep(Step.SELECT_WIFI);
+      }
+  };
+
+  return {
+    currentStep,
+    isScanningBle,
+    bleDevices,
+    wifiList,
+    modalVisible,
+    selectedSsid,
+    password,
+    setModalVisible,
+    setPassword,
+    startScanProcess,
+    connectToDevice,
+    onWifiSelect,
+    onSubmitConfig
+  };
 };

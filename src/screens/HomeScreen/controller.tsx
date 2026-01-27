@@ -103,9 +103,9 @@ export const MOCK_GATEWAYS = [
 ];
 
 export const ACTIONS_DATA = [
-  { title: 'Cấu hình thiết bị', icon: 'settings', color: '#4B5563' },
-  { title: 'Tạo thiết bị', icon: 'add-circle-outline', color: '#2563EB' },
-  { title: 'Quét mã', icon: 'qr-code-scanner', color: '#4B5563' },
+  { title: 'Thêm gateway', icon: 'settings', color: '#4B5563', route: 'ConfigDevice' },
+  { title: 'Thêm thiết bị', icon: 'add-circle-outline', color: '#2563EB', route: 'AddDevice' },
+  { title: 'Thêm mạng liên gia', icon: 'qr-code-scanner', color: '#4B5563', route: 'QrCode' },
 ];
 
 export const BANNER_IMAGES = [

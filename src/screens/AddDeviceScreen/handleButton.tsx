@@ -1,12 +1,10 @@
 import { Alert } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import axios from 'axios';
-
-
-import { getCurrentLanguageTranslations } from '../../utils/localization';
-import { API_BASE_URL } from '../../services/api';
-import { login } from '../../store/smartHomeSlice';
-import { useAppDispatch } from '../../store/hooks';
+import { useAppDispatch } from '../../../store/hooks';
+import { login } from '../../../store/smartHomeSlice';
+import { getCurrentLanguageTranslations } from '../../../utils/localization';
+import { API_BASE_URL } from '../../../services/api';
 
 
 export const useLoginHandlers = (
@@ -43,6 +41,7 @@ export const useLoginHandlers = (
       const data = response.data;
 
       if (data.CODE === 1) {
+        // ✅ Lưu user vào redux
         dispatch(login({
           user: data.DATA,
         }));

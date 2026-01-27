@@ -27,7 +27,7 @@ import RoomDetailScreen from './src/screens/RoomDetail';
 import { TermsScreen } from './src/screens/TermsScreen';
 import { PrivacyPolicyScreen } from './src/screens/PrivacyPolicyScreen';
 import { HistoryGatewayScreen } from './src/screens/HistoryGatewayScreen';
-import { HistorySensorScreen } from './src/screens/HistorySensorScreen ';
+import { HistorySensorScreen } from './src/screens/HistorySensorScreen';
 import { ChangePasswordScreen } from './src/screens/ChangePasswordScreen';
 import { EditProfileScreen } from './src/screens/UploadImageScreen';
 import { requestInitialPermissions } from './src/services/permission';
@@ -36,6 +36,9 @@ import { Provider } from 'react-redux';
 
 // 1. IMPORT HOOK DỊCH THUẬT
 import { useAppTranslation } from './src/hooks/useAppTranslation';
+import { AddDeviceScreen } from './src/screens/AddDeviceScreen';
+import { QrCodeScreen } from './src/screens/QrCodeScreen';
+import { CreateQrGatewayScreen } from './src/screens/CreateQrGateway';
 
 const Stack = createStackNavigator();
 
@@ -174,6 +177,21 @@ const AppNavigator = () => {
               <Stack.Screen 
                 name="EditProfile" 
                 component={EditProfileScreen} 
+                options={{ ...commonHeaderOptions, title: t('edit_profile_title') }} 
+              />
+              <Stack.Screen 
+                name="AddDevice" 
+                component={AddDeviceScreen} 
+                options={{ ...commonHeaderOptions, title: t('edit_profile_title') }} 
+              />
+               <Stack.Screen 
+                name="QrCode" 
+                component={QrCodeScreen} 
+                options={{ ...commonHeaderOptions, title: t('edit_profile_title') }} 
+              />
+                <Stack.Screen 
+                name="CreateQrGateway" 
+                component={CreateQrGatewayScreen} 
                 options={{ ...commonHeaderOptions, title: t('edit_profile_title') }} 
               />
             </>

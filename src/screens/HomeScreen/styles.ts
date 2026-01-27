@@ -434,5 +434,36 @@ export const styles = StyleSheet.create({
     color: '#4B5563',
     marginLeft: 4,
     fontWeight: '500',
-  }
+  },
+  footerContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)', // Nền trắng mờ để thấy danh sách bên dưới
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderTopWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  checkAllBtn: {
+    backgroundColor: '#2563EB',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 12,
+    // Đổ bóng cho nút
+    shadowColor: '#2563EB',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 5,
+  },
+  checkAllText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginLeft: 8,
+  },
 });
