@@ -1,41 +1,58 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, TouchableOpacity, StatusBar, Alert } from 'react-native';
 import { Text } from 'react-native-paper';
-import { CameraScreen } from 'react-native-camera-kit'; // Thư viện mới
+import { 
+  Camera, 
+  useCameraDevice, 
+  useCodeScanner, 
+  useCameraPermission 
+} from 'react-native-vision-camera';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialIcons from '@react-native-vector-icons/material-icons';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
 export function QrCodeScreen({ navigation }: any) {
-  const [isScanned, setIsScanned] = useState(false);
+  const { hasPermission, requestPermission } = useCameraPermission();
+  const [isActive, setIsActive] = useState(true);
+  const device = useCameraDevice('back');
+
+  // Yêu cầu quyền camera khi vào màn hình
+  useEffect(() => {
+    requestPermission();
+  }, []);
 
   // Logic xử lý khi quét được mã QR
-  const onReadCode = (event: any) => {
-    if (isScanned) return; 
+  const codeScanner = useCodeScanner({
+    codeTypes: ['qr'],
+    onCodeScanned: (codes) => {
+      if (codes.length > 0 && isActive) {
+        setIsActive(false); // Tạm dừng quét để xử lý
+        const value = codes[0].value;
+        
+        Alert.alert("Quét thành công", `Mã Serial: ${value}`, [
+          { text: "Quét lại", onPress: () => setIsActive(true) },
+          { text: "Xác nhận", onPress: () => navigation.goBack() }
+        ]);
+      }
+    }
+  });
 
-    const value = event.nativeEvent.codeStringValue;
-    setIsScanned(true); // Tạm dừng logic quét
-
-    Alert.alert("Quét thành công", `Mã Serial: ${value}`, [
-      { text: "Xác nhận", onPress: () => navigation.goBack() },
-      { text: "Quét lại", onPress: () => setIsScanned(false) }
-    ]);
-  };
+  if (!hasPermission) return <View style={styles.center}><Text>Chưa cấp quyền Camera</Text></View>;
+  if (device == null) return <View style={styles.center}><Text>Không tìm thấy thiết bị Camera</Text></View>;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
       
-      <CameraScreen
-        actions={{ rightFilterTabBarMenuItems: [] }}
-        onReadCode={onReadCode}
-        scanBarcode={!isScanned} // Bật/tắt quét
-        hideControls={true} 
-        showFrame={false} // Tắt khung mặc định của thư viện để dùng khung tự chế bên dưới
+      <Camera
+        style={StyleSheet.absoluteFill}
+        device={device}
+        isActive={isActive}
+        codeScanner={codeScanner}
       />
 
-      {/* OVERLAY LỚP PHỦ TỐI (Giữ nguyên giao diện của bạn) */}
-      <View style={styles.overlay} pointerEvents="none">
+      {/* OVERLAY LỚP PHỦ TỐI */}
+      <View style={styles.overlay}>
         <View style={styles.unfocusedContainer}></View>
         <View style={styles.middleContainer}>
           <View style={styles.unfocusedContainer}></View>
@@ -48,15 +65,12 @@ export function QrCodeScreen({ navigation }: any) {
           </View>
           <View style={styles.unfocusedContainer}></View>
         </View>
-        <View style={styles.bottomContainer}></View>
-      </View>
-
-      {/* NÚT BẤM VÀ CHÚ THÍCH (Nằm trên cùng lớp overlay) */}
-      <View style={styles.contentUI}>
-          <Text style={styles.hintText}>Di chuyển camera đến mã QR trên thiết bị</Text>
-          <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+        <View style={styles.bottomContainer}>
+           <Text style={styles.hintText}>Di chuyển camera đến mã QR trên thiết bị</Text>
+           <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
               <MaterialIcons name="close" size={30} color="#fff" />
-          </TouchableOpacity>
+           </TouchableOpacity>
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -64,23 +78,18 @@ export function QrCodeScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
-  overlay: { ...StyleSheet.absoluteFillObject, zIndex: 1 },
-  contentUI: { 
-    position: 'absolute', 
-    bottom: 50, 
-    left: 0, 
-    right: 0, 
-    alignItems: 'center', 
-    zIndex: 2 
-  },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  overlay: { ...StyleSheet.absoluteFillObject },
   unfocusedContainer: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)' },
   middleContainer: { flexDirection: 'row', height: 260 },
   focusedContainer: { width: 260, position: 'relative' },
+  // Bo góc khung quét
   cornerTopLeft: { position: 'absolute', top: 0, left: 0, width: 40, height: 40, borderTopWidth: 4, borderLeftWidth: 4, borderColor: '#2563EB' },
   cornerTopRight: { position: 'absolute', top: 0, right: 0, width: 40, height: 40, borderTopWidth: 4, borderRightWidth: 4, borderColor: '#2563EB' },
   cornerBottomLeft: { position: 'absolute', bottom: 0, left: 0, width: 40, height: 40, borderBottomWidth: 4, borderLeftWidth: 4, borderColor: '#2563EB' },
   cornerBottomRight: { position: 'absolute', bottom: 0, right: 0, width: 40, height: 40, borderBottomWidth: 4, borderRightWidth: 4, borderColor: '#2563EB' },
-  bottomContainer: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)' },
+  
+  bottomContainer: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', paddingTop: 40 },
   hintText: { color: '#fff', fontSize: 14, marginBottom: 30, opacity: 0.8 },
   backBtn: { width: 60, height: 60, borderRadius: 30, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' }
 });
