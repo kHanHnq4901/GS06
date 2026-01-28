@@ -1,127 +1,164 @@
-// mqtt.ts
 import mqtt, { MqttClient, IClientOptions } from 'mqtt';
 
-type MessageHandler = (topic: string, message: string) => void;
+// Cấu hình từ thông tin bạn cung cấp
+const BROKER_HOST = '222.252.14.147';
+const BROKER_PORT = 2883;
+const BROKER_URL = `tcp://${BROKER_HOST}:${BROKER_PORT}`;
 
-class MQTTService {
+export type CommandName = 
+  | 'ADD_NODE' | 'RM_NODE' | 'ADD_GW' | 'RM_GATEWAY' 
+  | 'TEST_NODE' | 'SIREN_ON' | 'SIREN_OFF' 
+  | 'SET_PERIOD' | 'RESET';
+
+class MqttProtocol {
   private client: MqttClient | null = null;
-  private isConnected = false;
-  private messageHandler: MessageHandler | null = null;
 
-  connect(
-    brokerUrl: string,
-    options?: IClientOptions,
-  ): Promise<void> {
+  private getOptions(): IClientOptions {
+    return {
+      username: 'emicappgs06',
+      password: 'emicappgs06@0126',
+      protocol: 'tcp',
+      port: BROKER_PORT,
+      host: BROKER_HOST,
+      clientId: `safefire_${Math.random().toString(16).slice(2, 10)}`,
+      clean: true,
+      connectTimeout: 10000,
+      reconnectPeriod: 0, 
+    };
+  }
+
+  private generateMsgId(command: string): string {
+    return `cmd-${Date.now()}-${command.toLowerCase()}`;
+  }
+
+  /**
+   * Quy trình: Connect -> Subscribe -> Publish -> Wait Response -> Disconnect
+   */
+  async executeCommand(gatewayId: string, command: CommandName, params?: any): Promise<any> {
+    const downTopic = `safety/01/${gatewayId}/down/command`;
+    const upTopic = `safety/01/${gatewayId}/up/status`;
+    const msgId = this.generateMsgId(command);
+
     return new Promise((resolve, reject) => {
-      if (this.client && this.isConnected) {
-        resolve();
-        return;
-      }
+      console.log(`[MQTT] Đang thử kết nối TCP tới ${BROKER_URL}...`);
+      
+      // Khởi tạo kết nối trực tiếp từ thư viện mqtt
+      this.client = mqtt.connect(BROKER_URL, this.getOptions());
 
-      this.client = mqtt.connect(brokerUrl, {
-        clientId: `safefire_${Date.now()}`,
-        clean: true,
-        connectTimeout: 5000,
-        reconnectPeriod: 3000,
-        ...options,
-      });
+      const cleanup = () => {
+        if (this.client) {
+          console.log('[MQTT] Đang đóng kết nối...');
+          this.client.end(true);
+          this.client = null;
+        }
+      };
 
+      // Timeout sau 15 giây nếu Gateway không phản hồi
+      const timeout = setTimeout(() => {
+        cleanup();
+        reject(new Error(`TIMEOUT: Gateway ${gatewayId} không phản hồi (${msgId})`));
+      }, 15000);
+
+      // 1. Khi kết nối thành công
       this.client.on('connect', () => {
-        this.isConnected = true;
-        console.log('[MQTT] Connected');
-        resolve();
+        console.log('[MQTT] Kết nối thành công!');
+        
+        // 2. Subscribe topic phản hồi trước khi gửi lệnh
+        this.client?.subscribe(upTopic, { qos: 1 }, (err) => {
+          if (err) {
+            clearTimeout(timeout);
+            cleanup();
+            return reject(new Error('Lỗi Subscribe: ' + err.message));
+          }
+
+          // 3. Publish lệnh
+          const payload = JSON.stringify({
+            type: 'cmd',
+            msgId: msgId,
+            timestamp: Math.floor(Date.now() / 1000),
+            data: { command, ...(params || {}) }
+          });
+
+          this.client?.publish(downTopic, payload, { qos: 1 }, (pErr) => {
+            if (pErr) {
+              clearTimeout(timeout);
+              cleanup();
+              reject(new Error('Lỗi Publish: ' + pErr.message));
+            } else {
+              console.log(`[MQTT] Đã gửi lệnh tới: ${downTopic}`);
+            }
+          });
+        });
       });
 
-      this.client.on('reconnect', () => {
-        console.log('[MQTT] Reconnecting...');
-      });
-
-      this.client.on('close', () => {
-        this.isConnected = false;
-        console.log('[MQTT] Disconnected');
-      });
-
-      this.client.on('error', error => {
-        console.log('[MQTT] Error', error);
-        reject(error);
-      });
-
+      // 4. Lắng nghe tin nhắn trả về
       this.client.on('message', (topic, message) => {
-        if (this.messageHandler) {
-          this.messageHandler(topic, message.toString());
+        const raw = message.toString();
+        console.log(`[MQTT] Nhận phản hồi:`, raw);
+        
+        try {
+          const data = JSON.parse(raw);
+          // Khớp msgId để xác nhận đúng phản hồi của lệnh vừa gửi
+          if (data.msgId === msgId || data.type === 'wifi_result' || data.type === 'scan_resp') {
+            clearTimeout(timeout);
+            cleanup();
+            resolve(data);
+          }
+        } catch (e) {
+          console.log('[MQTT] Phản hồi không phải JSON hợp lệ');
         }
       });
+
+      // 5. Xử lý lỗi
+      this.client.on('error', (err) => {
+        console.log('[MQTT] Lỗi kết nối:', err.message);
+        clearTimeout(timeout);
+        cleanup();
+        reject(err);
+      });
     });
   }
 
-  disconnect() {
-    if (this.client) {
-      this.client.end(true);
-      this.client = null;
-      this.isConnected = false;
-      console.log('[MQTT] Disconnected manually');
-    }
+
+  async addNode(gatewayId: string) {
+    return this.executeCommand(gatewayId, 'ADD_NODE');
   }
 
-  subscribe(topic: string, qos: 0 | 1 | 2 = 0) {
-    if (!this.client || !this.isConnected) {
-      console.warn('[MQTT] Cannot subscribe, not connected');
-      return;
-    }
+  async removeNode(gatewayId: string, nodeId: string) {
+    return this.executeCommand(gatewayId, 'RM_NODE', { nodeId });
+  }
 
-    this.client.subscribe(topic, { qos }, err => {
-      if (err) {
-        console.log('[MQTT] Subscribe error', err);
-      } else {
-        console.log(`[MQTT] Subscribed: ${topic}`);
-      }
+  async addLinkGateway(gatewayId: string, targetGatewayId: string) {
+    return this.executeCommand(gatewayId, 'ADD_GW', { GatewayId: targetGatewayId });
+  }
+
+  async removeLinkGateway(gatewayId: string, targetGatewayId: string) {
+    return this.executeCommand(gatewayId, 'RM_GATEWAY', { GatewayId: targetGatewayId });
+  }
+
+  async testDevice(gatewayId: string, scope: 0 | 1, nodeId?: string) {
+    return this.executeCommand(gatewayId, 'TEST_NODE', { scope, nodeId: nodeId || "" });
+  }
+
+  async sirenOff(gatewayId: string) {
+    return this.executeCommand(gatewayId, 'SIREN_OFF');
+  }
+
+  async sirenOn(gatewayId: string) {
+    return this.executeCommand(gatewayId, 'SIREN_ON');
+  }
+
+  async setPeriod(gatewayId: string, heartbeat: number, nodeStatus: number, linkStatus: number) {
+    return this.executeCommand(gatewayId, 'SET_PERIOD', {
+      heartbeat,
+      nodeStatus,
+      linkStatus
     });
   }
 
-  unsubscribe(topic: string) {
-    if (!this.client) return;
-
-    this.client.unsubscribe(topic, err => {
-      if (err) {
-        console.log('[MQTT] Unsubscribe error', err);
-      } else {
-        console.log(`[MQTT] Unsubscribed: ${topic}`);
-      }
-    });
-  }
-
-  publish(
-    topic: string,
-    payload: any,
-    qos: 0 | 1 | 2 = 0,
-    retain = false,
-  ) {
-    if (!this.client || !this.isConnected) {
-      console.warn('[MQTT] Cannot publish, not connected');
-      return;
-    }
-
-    const message =
-      typeof payload === 'string' ? payload : JSON.stringify(payload);
-
-    this.client.publish(topic, message, { qos, retain }, err => {
-      if (err) {
-        console.log('[MQTT] Publish error', err);
-      }
-    });
-  }
-
-  // ===============================
-  // REGISTER MESSAGE HANDLER
-  // ===============================
-  onMessage(handler: MessageHandler) {
-    this.messageHandler = handler;
-  }
-
-  isMQTTConnected(): boolean {
-    return this.isConnected;
+  async resetDevice(gatewayId: string) {
+    return this.executeCommand(gatewayId, 'RESET');
   }
 }
 
-const MQTT = new MQTTService();
-export default MQTT;
+export const MqttProtocolService = new MqttProtocol();

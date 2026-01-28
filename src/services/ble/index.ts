@@ -4,8 +4,8 @@ import { Buffer } from 'buffer';
 
 // Cấu hình UUID theo tài liệu và yêu cầu mới [cite: 21, 24]
 const SERVICE_UUID = 'a500';
-const CHAR_NOTIFY  = 'a503'; // Status - DEVICE → Mobile (Phản hồi trạng thái) [cite: 26]
-const CHAR_WRITE   = 'a501'; // Control/Data - Mobile → DEVICE (Gửi lệnh/dữ liệu) [cite: 26]
+const CHAR_NOTIFY  = 'a501'; // Status - DEVICE → Mobile (Phản hồi trạng thái) [cite: 26]
+const CHAR_WRITE   = 'a503'; // Control/Data - Mobile → DEVICE (Gửi lệnh/dữ liệu) [cite: 26]
 
 export class BleProtocol {
   private static sequenceId: number = 1;

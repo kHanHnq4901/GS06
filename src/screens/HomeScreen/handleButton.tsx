@@ -7,6 +7,7 @@ import { getCurrentLanguageTranslations } from '../../utils/localization';
 import { API_BASE_URL } from '../../services/api';
 import { login } from '../../store/smartHomeSlice';
 import { useAppDispatch } from '../../store/hooks';
+import { MqttProtocolService } from '../../services/mqtt';
 
 
 export const useLoginHandlers = (
@@ -91,4 +92,13 @@ export const useLoginHandlers = (
     navigateToRegister,
     navigateToSettings,
   };
+};
+export const handleToggleSiren = (gatewayId: string, isSirenActive: boolean) => {
+  if (isSirenActive) {
+    MqttProtocolService.sirenOff(gatewayId);
+    Alert.alert("Thông báo", "Đã gửi lệnh tắt còi.");
+  } else {
+    MqttProtocolService.sirenOn(gatewayId);
+    Alert.alert("Thông báo", "Đã gửi lệnh bật còi.");
+  }
 };

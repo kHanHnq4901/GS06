@@ -24,6 +24,7 @@ import { styles } from './styles';
 import { BannerSlider } from './components/BannerSlider';
 import { ACTIONS_DATA, BANNER_IMAGES, MOCK_GATEWAYS } from './controller';
 import MaterialIcons from '@react-native-vector-icons/material-icons';
+import { MqttProtocolService } from '../../services/mqtt';
 
 type TabType = 'GATEWAY' | 'DEVICE';
 
@@ -141,7 +142,18 @@ export function HomeScreen() {
               >
                 <MaterialIcons name="qr-code-scanner" size={22} color="#4B5563" />
               </TouchableOpacity>
-
+              <TouchableOpacity 
+                style={{ padding: 6 }} 
+                onPress={() => {
+                  MqttProtocolService.sirenOff(item.id);
+                }}
+              >
+                <MaterialIcons 
+                  name={item.isSirenActive ? "volume-up" : "volume-off"} 
+                  size={24} 
+                  color={item.isSirenActive ? "#DC2626" : "#4B5563"} 
+                />
+              </TouchableOpacity>
               <TouchableOpacity 
                 style={{ padding: 6, marginRight: 4 }} 
                 onPress={() => navigation.navigate('HistoryGateway', item)}
