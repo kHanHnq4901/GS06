@@ -4,6 +4,7 @@ export const en = {
   config_device_title: "Device Configuration",
   edit_profile_title: "Edit Profile",
   
+  config_wifi_gateway: "Configure WiFi Gateway",
   // Common
   hello: "Hello",
   cancel: "Cancel",

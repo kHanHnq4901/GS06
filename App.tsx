@@ -39,6 +39,7 @@ import { useAppTranslation } from './src/hooks/useAppTranslation';
 import { AddDeviceScreen } from './src/screens/AddDeviceScreen';
 import { QrCodeScreen } from './src/screens/QrCodeScreen';
 import { CreateQrGatewayScreen } from './src/screens/CreateQrGateway';
+import WifiConfigScreen from './src/screens/WifiConfigScreen';
 
 const Stack = createStackNavigator();
 
@@ -193,6 +194,11 @@ const AppNavigator = () => {
                 name="CreateQrGateway" 
                 component={CreateQrGatewayScreen} 
                 options={{ ...commonHeaderOptions, title: t('edit_profile_title') }} 
+              />
+              <Stack.Screen 
+                name="WifiConfigScreen" 
+                component={WifiConfigScreen} 
+                 options={{ ...commonHeaderOptions, title: t('config_wifi_gateway') }} 
               />
             </>
           )}

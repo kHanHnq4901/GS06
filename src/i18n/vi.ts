@@ -3,7 +3,8 @@ export const vi = {
   room_detail_title: "Chi tiết phòng",
   config_device_title: "Cấu hình thiết bị",
   edit_profile_title: "Cập nhật hồ sơ",
-  
+
+  config_wifi_gateway: "Cấu hình WiFi Gateway",
   // Common
   hello: "Xin chào",
   cancel: "Hủy",

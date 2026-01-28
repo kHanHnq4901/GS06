@@ -132,26 +132,30 @@ export const requestStoragePermission = async (): Promise<boolean> => {
 export const requestNotificationPermission = async (): Promise<boolean> => {
   // BƯỚC 1: Xử lý quyền hệ thống cho Android 13+
   if (Platform.OS === 'android' && Number(Platform.Version) >= 33) {
+    // Sử dụng cách kiểm tra an toàn nếu thư viện chưa cập nhật type
+    const permissionStr = (PERMISSIONS.ANDROID as any).POST_NOTIFICATIONS 
+                          || 'android.permission.POST_NOTIFICATIONS';
+
     const granted = await checkAndRequest(
-      PERMISSIONS.ANDROID.POST_NOTIFICATIONS,
-      'Android 13 Notification'
+      permissionStr as Permission,
+      'Thông báo'
     );
     if (!granted) return false;
   }
 
-  // BƯỚC 2: Đăng ký với Firebase (Cho cả iOS và Android)
+  // BƯỚC 2: Đăng ký với Firebase
   try {
     const messaging = getMessaging();
-    const authStatus = await requestFirebasePermission(messaging);
+    const authStatus = await messaging.requestPermission(); // Sử dụng hàm chuẩn của RNFirebase
     
     const enabled =
-      authStatus === AuthorizationStatus.AUTHORIZED ||
-      authStatus === AuthorizationStatus.PROVISIONAL;
+      authStatus === 1 || // AUTHORIZED
+      authStatus === 2;   // PROVISIONAL
 
-    console.log(TAG, 'Firebase Messaging Status:', authStatus);
+    console.log('Firebase Messaging Status:', authStatus);
     return enabled;
   } catch (error: any) {
-    console.error(TAG, 'Firebase Permission Error:', error.message);
+    console.error('Firebase Permission Error:', error.message);
     return false;
   }
 };
