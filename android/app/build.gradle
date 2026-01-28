@@ -73,6 +73,7 @@ dependencies {
     implementation 'com.google.firebase:firebase-analytics'
     // Bạn có thể thêm các thư viện firebase khác ở đây (ví dụ: messaging)
     // implementation 'com.google.firebase:firebase-messaging'
+
 }
 
 // Vector Icons

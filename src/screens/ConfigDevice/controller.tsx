@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Alert, EmitterSubscription, Platform, NativeEventEmitter, NativeModules } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { BleProtocol } from '../../gateway/ble'; // Đảm bảo đường dẫn đúng
+import { BleProtocol } from '../../services/ble'; // Đảm bảo đường dẫn đúng
 import BleManager from 'react-native-ble-manager';
 import { sleep } from '../../utils';
 

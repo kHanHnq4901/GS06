@@ -23,6 +23,7 @@ buildscript {
         
         // GIỮ LẠI DÒNG NÀY (Xóa đoạn plugins ở cuối file đi)
         classpath('com.google.gms:google-services:4.4.2') 
+        
     }
 }
 
