@@ -102,7 +102,7 @@ export class BleProtocol {
    * Hàm helper gửi dữ liệu qua characteristic Write (A501) [cite: 26]
    */
   private static async sendData(peripheralId: string, payload: object): Promise<void> {
-    const dataString = JSON.stringify(payload);
+    const dataString = JSON.stringify(payload) + 0x04;
     const data = Buffer.from(dataString).toJSON().data;
     
     console.log(`[BLE] Sending to ${CHAR_WRITE}:`, dataString);
@@ -123,17 +123,52 @@ export class BleProtocol {
    * Lắng nghe phản hồi từ characteristic Status (A503) [cite: 26]
    */
   static addDataListener(callback: (res: any) => void): EventSubscription {
+    let acc = "";
+
+    const MAX_ACC_LEN = 32 * 1024; 
+
     return BleManager.onDidUpdateValueForCharacteristic((data) => {
-      // Chỉ xử lý dữ liệu từ CHAR_NOTIFY (A503) [cite: 26]
-      if (data.characteristic.toLowerCase().includes(CHAR_NOTIFY.toLowerCase())) {
-        const dataString = Buffer.from(data.value).toString('utf-8');
+      const ch = String(data.characteristic || "").toLowerCase();
+      const svc = String(data.service || "").toLowerCase();
+      const raw = Buffer.from(data.value || []).toString("utf-8");
+
+      console.log("[BLE] NOTIFY:", { svc, ch, raw });
+
+
+      if (!data?.characteristic) return;
+
+      if (!String(data.characteristic).toLowerCase().includes(String(CHAR_NOTIFY).toLowerCase())) {
+        return;
+      }
+      const bytes: number[] = data.value || [];
+      if (!bytes.length) return;
+
+      const chunkStr = Buffer.from(bytes).toString("utf-8");
+
+      acc += chunkStr;
+
+      if (acc.length > MAX_ACC_LEN) {
+        console.warn("[BLE] Accumulator overflow, resetting buffer");
+        acc = "";
+        return;
+      }
+
+      const parts = acc.split("\x04");
+
+      acc = parts.pop() ?? "";
+
+      for (const frame of parts) {
+        const trimmed = frame.trim();
+        if (!trimmed) continue;
+
         try {
-          const jsonObj = JSON.parse(dataString);
-          console.log('[BLE] Received Notify:', jsonObj);
+          const jsonObj = JSON.parse(trimmed);
+          console.log("[BLE] Received JSON (framed):", jsonObj);
           callback(jsonObj);
         } catch (e) {
-          console.warn('[BLE] Received non-JSON data:', dataString);
-          callback({ type: 'raw', data: dataString });
+          // Nếu vẫn lỗi thì log raw để debug
+          console.warn("[BLE] Frame is not valid JSON:", trimmed);
+          callback({ type: "raw", data: trimmed });
         }
       }
     });
