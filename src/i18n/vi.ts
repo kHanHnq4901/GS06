@@ -5,6 +5,8 @@ export const vi = {
   edit_profile_title: "Cập nhật hồ sơ",
 
   config_wifi_gateway: "Cấu hình WiFi Gateway",
+  manager_home: "Quản lý nhà",
+  create_qr_gateway: "Tạo mã QR Gateway",
   // Common
   hello: "Xin chào",
   cancel: "Hủy",

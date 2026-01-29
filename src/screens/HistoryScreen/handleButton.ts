@@ -1,10 +1,13 @@
 import { Alert } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import axios from 'axios';
-import { useAppDispatch } from '../../../store/hooks';
-import { login } from '../../../store/smartHomeSlice';
-import { getCurrentLanguageTranslations } from '../../../utils/localization';
-import { API_BASE_URL } from '../../../services/api';
+
+
+import { API_BASE_URL } from '../../services/api';
+import { getCurrentLanguageTranslations } from '../../utils/localization';
+import { useAppDispatch } from '../../store/hooks';
+import { login } from '../../store/smartHomeSlice';
+
 
 
 export const useLoginHandlers = (
@@ -90,4 +93,42 @@ export const useLoginHandlers = (
     navigateToRegister,
     navigateToSettings,
   };
+};
+// services/api.ts
+
+
+
+
+
+export const getActionDisplay = (action: string) => {
+  switch (action?.toUpperCase()) {
+    case 'START':
+      return {
+        text: 'Bắt đầu báo cháy',
+        color: '#EF4444', // Đỏ
+        icon: '🔥',
+        badge: 'Khẩn cấp'
+      };
+    case 'END':
+      return {
+        text: 'Kết thúc cháy thiết bị',
+        color: '#F59E0B', // Cam
+        icon: '🧯',
+        badge: 'Đã tắt'
+      };
+    case 'CLEAR':
+      return {
+        text: 'Kết thúc báo cháy hệ thống',
+        color: '#10B981', // Xanh lá
+        icon: 'ℹ️',
+        badge: 'Bình thường'
+      };
+    default:
+      return {
+        text: action || 'Thông tin hệ thống',
+        color: '#2563EB', // Xanh dương
+        icon: 'ℹ️',
+        badge: 'Thông tin'
+      };
+  }
 };

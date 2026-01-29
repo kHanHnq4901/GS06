@@ -40,6 +40,7 @@ import { AddDeviceScreen } from './src/screens/AddDeviceScreen';
 import { QrCodeScreen } from './src/screens/QrCodeScreen';
 import { CreateQrGatewayScreen } from './src/screens/CreateQrGateway';
 import WifiConfigScreen from './src/screens/WifiConfigScreen';
+import { ManagerHomeScreen } from './src/screens/ManagerHomeScreen';
 
 const Stack = createStackNavigator();
 
@@ -193,12 +194,17 @@ const AppNavigator = () => {
                 <Stack.Screen 
                 name="CreateQrGateway" 
                 component={CreateQrGatewayScreen} 
-                options={{ ...commonHeaderOptions, title: t('edit_profile_title') }} 
+                options={{ ...commonHeaderOptions, title: t('create_qr_gateway') }} 
               />
               <Stack.Screen 
                 name="WifiConfigScreen" 
                 component={WifiConfigScreen} 
                  options={{ ...commonHeaderOptions, title: t('config_wifi_gateway') }} 
+              />
+              <Stack.Screen 
+                name="ManagerHomeScreen" 
+                component={ManagerHomeScreen} 
+                 options={{ ...commonHeaderOptions, title: t('manager_home') }} 
               />
             </>
           )}

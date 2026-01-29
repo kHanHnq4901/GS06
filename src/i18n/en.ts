@@ -5,6 +5,8 @@ export const en = {
   edit_profile_title: "Edit Profile",
   
   config_wifi_gateway: "Configure WiFi Gateway",
+  manager_home: "Manager Home",
+  create_qr_gateway: "Create QR Gateway",
   // Common
   hello: "Hello",
   cancel: "Cancel",

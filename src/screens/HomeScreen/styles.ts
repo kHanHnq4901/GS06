@@ -466,4 +466,78 @@ export const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginLeft: 8,
   },
+   swipeActionContainer: {
+    flexDirection: 'row',
+    width: 140,
+    marginBottom: 12,
+    marginRight: 16,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  swipeButton: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  swipeButtonText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: 'bold',
+    marginTop: 4,
+  },
+  housePickerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1, // Để nó chiếm phần lớn không gian bên trái
+  },
+  houseSelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 8,
+    flex: 1,
+  },
+  houseLabel: {
+    fontSize: 11,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  houseName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1F2937',
+    maxWidth: 150, // Tránh text quá dài làm vỡ layout
+  },
+  manageBtn: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 10,
+    paddingHorizontal: 8,
+  },
+  manageBtnText: {
+    fontSize: 10,
+    color: '#4B5563',
+    fontWeight: 'bold',
+    marginTop: 2,
+  },
+  houseDropdown: {
+    borderRadius: 12,
+    marginTop: -30, // Điều chỉnh vị trí dropdown
+    backgroundColor: '#fff',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+  },
+  houseDropdownItem: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#E5E7EB',
+  },
+  houseDropdownText: {
+    fontSize: 14,
+    color: '#374151',
+  },
 });

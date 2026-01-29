@@ -103,4 +103,3 @@ export const handleToggleSiren = (gatewayId: string, isSirenActive: boolean) => 
   }
 };
 
-

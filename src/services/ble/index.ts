@@ -102,7 +102,7 @@ export class BleProtocol {
    * Hàm helper gửi dữ liệu qua characteristic Write (A501) [cite: 26]
    */
   private static async sendData(peripheralId: string, payload: object): Promise<void> {
-    const dataString = JSON.stringify(payload) + 0x04;
+    const dataString = JSON.stringify(payload) + "\x04";
     const data = Buffer.from(dataString).toJSON().data;
     
     console.log(`[BLE] Sending to ${CHAR_WRITE}:`, dataString);
