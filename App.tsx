@@ -41,6 +41,7 @@ import { QrCodeScreen } from './src/screens/QrCodeScreen';
 import { CreateQrGatewayScreen } from './src/screens/CreateQrGateway';
 import WifiConfigScreen from './src/screens/WifiConfigScreen';
 import { ManagerHomeScreen } from './src/screens/ManagerHomeScreen';
+import { DetailGatewayScreen } from './src/screens/DetailGatewaySreen';
 
 const Stack = createStackNavigator();
 
@@ -205,6 +206,14 @@ const AppNavigator = () => {
                 name="ManagerHomeScreen" 
                 component={ManagerHomeScreen} 
                  options={{ ...commonHeaderOptions, title: t('manager_home') }} 
+              />
+                <Stack.Screen 
+                name="DetailGatewayScreen" 
+                component={DetailGatewayScreen} 
+                options={{ 
+                  ...commonHeaderOptions, 
+                  headerShown: false // Thêm dòng này để ẩn header mặc định
+                }} 
               />
             </>
           )}

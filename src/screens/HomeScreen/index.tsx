@@ -73,12 +73,28 @@ export function HomeScreen() {
 
   const renderListHeader = () => (
     <>
-      <Animated.View entering={FadeInDown.duration(600)}><BannerSlider data={BANNER_IMAGES} /></Animated.View>
+      <Animated.View entering={FadeInDown.duration(600)}>
+        <BannerSlider data={BANNER_IMAGES} />
+      </Animated.View>
       <View style={styles.tabContainer}>
-        {['GATEWAY', 'DEVICE'].map((tab) => (
-          <TouchableOpacity key={tab} style={[styles.tabItem, activeTab === tab && styles.tabItemActive]} onPress={() => setActiveTab(tab as TabType)}>
-            <MaterialIcons name={tab === 'GATEWAY' ? "router" : "sensors"} size={20} color={activeTab === tab ? '#2563EB' : '#6B7280'} />
-            <RNText style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>{tab === 'GATEWAY' ? `Gateway (${gateways.length})` : 'Thiết bị'}</RNText>
+        {[
+          { id: 'GATEWAY', label: `Gateway (${gateways.length})`, icon: 'router' },
+          { id: 'DEVICE', label: 'Thiết bị', icon: 'sensors' },
+          { id: 'LINK', label: 'Liên gia', icon: 'hub' }, // Tab mới
+        ].map((tab) => (
+          <TouchableOpacity 
+            key={tab.id} 
+            style={[styles.tabItem, activeTab === tab.id && styles.tabItemActive]} 
+            onPress={() => setActiveTab(tab.id as TabType)}
+          >
+            <MaterialIcons 
+              name={tab.icon as any} 
+              size={20} 
+              color={activeTab === tab.id ? '#2563EB' : '#6B7280'} 
+            />
+            <RNText style={[styles.tabText, activeTab === tab.id && styles.tabTextActive]}>
+              {tab.label}
+            </RNText>
           </TouchableOpacity>
         ))}
       </View>

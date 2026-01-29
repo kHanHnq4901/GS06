@@ -120,7 +120,7 @@ export const GatewayItem = React.memo(({ item, index, navigation, onHandlePress,
           <TouchableOpacity 
             style={styles.cardGateway} 
             activeOpacity={0.8} 
-            onPress={() => onHandlePress(item.GATEWAY_ID)}
+           onPress={() => navigation.navigate('DetailGatewayScreen', item)}
           >
             {/* PHẦN TRÊN: Ảnh & Trạng thái */}
             <View style={styles.rowBetween}>
@@ -128,7 +128,7 @@ export const GatewayItem = React.memo(({ item, index, navigation, onHandlePress,
                 <Image source={require('../../../asset/images/device/gateway.webp')} style={styles.gwImage} resizeMode="contain" />
                 <View style={{ marginLeft: 10 }}>
                   <RNText style={styles.gwName}>{item.GATEWAY_NAME}</RNText>
-                  <RNText style={styles.gwSerial}>ID: {item.GATEWAY_ID} | Line: {item.LINE_ID}</RNText>
+                  <RNText style={styles.gwSerial}>ID: {item.GATEWAY_ID} </RNText>
                 </View>
               </View>
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
