@@ -185,12 +185,12 @@ const AppNavigator = () => {
               <Stack.Screen 
                 name="AddDevice" 
                 component={AddDeviceScreen} 
-                options={{ ...commonHeaderOptions, title: t('edit_profile_title') }} 
+                options={{ ...commonHeaderOptions, headerShown: false  }} 
               />
                <Stack.Screen 
                 name="QrCode" 
                 component={QrCodeScreen} 
-                options={{ ...commonHeaderOptions, title: t('edit_profile_title') }} 
+                options={{ ...commonHeaderOptions, headerShown: false  }} 
               />
                 <Stack.Screen 
                 name="CreateQrGateway" 
@@ -212,7 +212,7 @@ const AppNavigator = () => {
                 component={DetailGatewayScreen} 
                 options={{ 
                   ...commonHeaderOptions, 
-                  headerShown: false // Thêm dòng này để ẩn header mặc định
+                  headerShown: false 
                 }} 
               />
             </>

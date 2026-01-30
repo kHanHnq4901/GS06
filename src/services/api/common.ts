@@ -45,7 +45,6 @@ export const getGatewayHeartbeatHistory = (gatewayId: number, limit = 1) => {
     Limit: limit
   })
   .then(r => {
-    // Log data trả về để check các trường (int?) như POWER, BATTERY, TEMERATURE
     console.log(`✅ [DATA] Heartbeat GW ${gatewayId}:`, r.data);
     return r.data;
   })
@@ -55,17 +54,6 @@ export const getGatewayHeartbeatHistory = (gatewayId: number, limit = 1) => {
     throw err;
   });
 };
-// 3. Log trạng thái mới nhất của Gateway (RSSI, Online...)
-export const getGatewayStatusHistory = (gatewayId: number, limit = 1) => 
-    axios.post(`${API_BASE_URL}/GetGatewayStatusHistory`, { GatewayId: gatewayId, Limit: limit })
-        .then(r => {
-            console.log(`[API] GetGatewayStatusHistory (GW: ${gatewayId}):`, r.data);
-            return r.data;
-        })
-        .catch(err => {
-            console.error(`[API ERROR] GetGatewayStatusHistory:`, err);
-            throw err;
-        });
 export const createHome = (UserId: number, HomeName: string) => 
     axios.post(`${API_BASE_URL}/CreateHome`, { UserId, HomeName });
 
@@ -97,4 +85,53 @@ export const removeGatewayFromHome = async (gatewayId: number, homeId: number) =
     } catch (error) {
         return { CODE: -1, MESSAGE_VI: 'Lỗi kết nối hệ thống' };
     }
+};
+
+// Lấy danh sách cảm biến thuộc Gateway
+export const getSensorsByGateway = (gatewayId: number) => 
+    axios.post(`${API_BASE_URL}/GetSensorsByGateway`, { GatewayId: gatewayId }).then(r => r.data);
+
+// Lấy lịch sử kết nối liên gia
+export const getLinkGatewayStatus = (gatewayId: number, limit = 20) => 
+    axios.post(`${API_BASE_URL}/GetLinkGatewayStatus`, { GatewayId: gatewayId, Limit: limit }).then(r => r.data);
+
+// Lấy trạng thái mới nhất của một Node (Sensor)
+export const getNodeStatusHistory = (nodeId: number, limit = 1) => 
+    axios.post(`${API_BASE_URL}/GetNodeStatusHistory`, { NodeId: nodeId, Limit: limit }).then(r => r.data);
+
+
+export const getSensorsByHomeId = async (homeId: number) => {
+  const res = await axios.post(`${API_BASE_URL}/GetSensorsByHomeId`, null, {
+    params: { HomeId: homeId }
+  });
+  return res.data;
+};
+
+// Lấy toàn bộ lịch sử Liên gia trong 1 nhà (chỉ 1 request)
+export const getLinkStatusByHomeId = async (homeId: number) => {
+  const res = await axios.post(`${API_BASE_URL}/GetLinkStatusByHomeId`, null, {
+    params: { HomeId: homeId }
+  });
+  return res.data;
+};
+
+export const renameSensor = async (sensorId: number, newName: string) => {
+  const res = await axios.post(`${API_BASE_URL}/RenameSensor`, null, {
+    params: { SensorId: sensorId, NewName: newName }
+  });
+  return res.data;
+};
+
+export const removeSensor = async (sensorId: number) => {
+  const res = await axios.post(`${API_BASE_URL}/RemoveSensor`, null, {
+    params: { SensorId: sensorId }
+  });
+  return res.data;
+};
+
+export const clearLinkGatewayStatus = async (gatewayId: number) => {
+  const res = await axios.post(`${API_BASE_URL}/ClearLinkGatewayStatus`, null, {
+    params: { GatewayId: gatewayId }
+  });
+  return res.data;
 };

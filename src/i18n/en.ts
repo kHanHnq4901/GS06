@@ -7,6 +7,7 @@ export const en = {
   config_wifi_gateway: "Configure WiFi Gateway",
   manager_home: "Manager Home",
   create_qr_gateway: "Create QR Gateway",
+  add_device: "Add Device",
   // Common
   hello: "Hello",
   cancel: "Cancel",

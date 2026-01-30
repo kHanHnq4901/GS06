@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   FlatList,
@@ -6,217 +6,261 @@ import {
   StatusBar,
   ActivityIndicator,
   StyleSheet,
+  Alert,
 } from 'react-native';
 import { Text } from 'react-native-paper';
 import Animated, { FadeInUp, FadeInDown } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialIcons from '@react-native-vector-icons/material-icons';
+import { useRoute, useNavigation } from '@react-navigation/native';
 
-// --- DỮ LIỆU GIẢ THIẾT BỊ LORA ---
-const MOCK_LORA_DEVICES = [
-  { id: 'LR-915-001', name: 'Đầu báo khói tầng 1', rssi: -85, snr: 7.5, type: 'SMOKE', status: 'ready' },
-  { id: 'LR-915-042', name: 'Cảm biến nhiệt kho', rssi: -92, snr: 5.2, type: 'HEAT', status: 'ready' },
-  { id: 'LR-915-108', name: 'Nút nhấn khẩn cấp', rssi: -70, snr: 9.1, type: 'BUTTON', status: 'ready' },
-  { id: 'LR-915-015', name: 'Đầu báo gas bếp', rssi: -105, snr: -2.1, type: 'GAS', status: 'ready' },
-  { id: 'LR-915-220', name: 'Cảm biến cửa thoát hiểm', rssi: -88, snr: 6.8, type: 'DOOR', status: 'ready' },
-];
+// Import Services
+import { MqttProtocolService } from '../../services/mqtt';
+import { getSensorsByGateway } from '../../services/api/common';
 
 export function AddDeviceScreen() {
+  const route = useRoute();
+  const navigation = useNavigation();
+  const { serial } = (route.params as any) || {};
+  
   const [devices, setDevices] = useState<any[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isAdding, setIsAdding] = useState(false); // Trạng thái đang thêm node
+  
+  const pollingRef = useRef<NodeJS.Timeout | null>(null);
 
-  useEffect(() => {
-    // Giả lập quá trình Gateway quét tìm thiết bị LoRa
-    handleRefresh();
-  }, []);
-
-  const handleRefresh = () => {
-    setIsSyncing(true);
-    setDevices([]);
-    // Mô phỏng độ trễ khi nhận gói tin LoRa từ Gateway
-    setTimeout(() => {
-      setDevices(MOCK_LORA_DEVICES);
+  // --- FETCH DỮ LIỆU ---
+  const fetchLoraDevices = useCallback(async () => {
+    if (!serial) return;
+    try {
+      setIsSyncing(true);
+      const res = await getSensorsByGateway(serial);
+      if (res.CODE === 1) {
+        setDevices(res.DATA);
+      }
+    } catch (error) {
+      console.error("Lỗi lấy dữ liệu LoRa:", error);
+    } finally {
       setIsSyncing(false);
-    }, 1500);
+    }
+  }, [serial]);
+
+  // --- REFRESH GỬI LẠI LỆNH ADD_NODE ---
+  const handleManualRefresh = async () => {
+    if (isAdding) return;
+    setIsSyncing(true);
+    try {
+      await MqttProtocolService.addNode(serial); // Gửi lại lệnh ghép nối
+      await fetchLoraDevices(); // Tải lại danh sách
+    } catch (e) {
+      console.log(e);
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
-  const getDeviceIcon = (type: string) => {
-    switch (type) {
-      case 'SMOKE': return 'detector-smoke';
-      case 'HEAT': return 'whatshot';
-      case 'GAS': return 'gas-meter';
-      case 'BUTTON': return 'touch-app';
-      default: return 'sensors';
+  // --- LOGIC THOÁT (Bị chặn nếu isAdding = true) ---
+  const handleExit = async () => {
+    if (isAdding) {
+      Alert.alert("Thông báo", "Vui lòng hoàn tất quá trình thêm thiết bị trước khi thoát.");
+      return;
     }
+    
+    try {
+      await MqttProtocolService.disconnectPairing(serial);
+      console.log(`[MQTT] Đã gửi lệnh thoát ghép nối (EOP) tới Gateway: ${serial}`);
+    } catch (error) {
+      console.log("Lỗi khi gửi lệnh thoát:", error);
+    } finally {
+      navigation.goBack();
+    }
+  };
+
+  useEffect(() => {
+    MqttProtocolService.addNode(serial); 
+    fetchLoraDevices();
+
+    pollingRef.current = setInterval(() => {
+      fetchLoraDevices();
+    }, 10000);
+
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+    };
+  }, [serial, fetchLoraDevices]);
+
+  // --- XỬ LÝ THÊM NODE ---
+  const onAddNode = (nodeId: string) => {
+    setIsAdding(true); // Khóa các tính năng thoát/refresh
+    Alert.alert(
+      "Xác nhận", 
+      `Bạn muốn thêm thiết bị ${nodeId}?`, 
+      [
+        { 
+          text: "Hủy", 
+          style: "cancel",
+          onPress: () => setIsAdding(false) // Mở khóa nếu hủy
+        },
+        { 
+          text: "Đồng ý", 
+          onPress: async () => {
+            try {
+              console.log("Đang thực hiện thêm node:", nodeId);
+              // Thực hiện logic API thêm ở đây nếu có
+              // await addNodeApi(nodeId); 
+            } finally {
+              setIsAdding(false); // Hoàn tất thì mở khóa
+            }
+          } 
+        }
+      ],
+      { cancelable: false }
+    );
   };
 
   const renderItem = ({ item, index }: { item: any; index: number }) => (
     <Animated.View entering={FadeInUp.delay(index * 100)} style={localStyles.deviceCard}>
-      <View style={[localStyles.iconBox, { backgroundColor: item.rssi > -90 ? '#ECFDF5' : '#FFF7ED' }]}>
-        <MaterialIcons 
-          name={getDeviceIcon(item.type)} 
-          size={24} 
-          color={item.rssi > -90 ? '#10B981' : '#F97316'} 
-        />
+      <View style={localStyles.iconBox}>
+        <MaterialIcons name="settings-remote" size={22} color="#2563EB" />
       </View>
-
-      <View style={{ flex: 1, marginLeft: 15 }}>
-        <Text style={localStyles.deviceName}>{item.name}</Text>
-        <Text style={localStyles.deviceInfo}>ID: {item.id}  •  SNR: {item.snr}dB</Text>
-        
-        <View style={localStyles.signalRow}>
-          <MaterialIcons 
-            name="podcasts" 
-            size={14} 
-            color={item.rssi > -90 ? '#10B981' : '#EF4444'} 
-          />
-          <Text style={[localStyles.rssiText, { color: item.rssi > -90 ? '#10B981' : '#EF4444' }]}>
-            Tín hiệu: {item.rssi} dBm ({item.rssi > -90 ? 'Tốt' : 'Yếu'})
-          </Text>
-        </View>
+      <View style={{ flex: 1, marginLeft: 12 }}>
+        <Text style={localStyles.deviceName}>{item.DEVICE_NAME || 'Cảm biến LoRa'}</Text>
+        <Text style={localStyles.deviceInfo}>ID: {item.SENSOR_ID}  •  Loại: {item.SENSOR_TYPE}</Text>
       </View>
-
       <TouchableOpacity 
-        style={localStyles.addButton}
-        onPress={() => console.log('Thêm thiết bị:', item.id)}
+        style={[localStyles.addSmallBtn, isAdding && { opacity: 0.5 }]} 
+        onPress={() => onAddNode(item.SENSOR_ID)}
+        disabled={isAdding}
       >
-        <MaterialIcons name="add" size={24} color="#fff" />
+        <MaterialIcons name="add" size={20} color="#2563EB" />
       </TouchableOpacity>
     </Animated.View>
   );
 
   return (
-    <SafeAreaView style={localStyles.container} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={localStyles.container} edges={['top']}>
       <StatusBar barStyle="dark-content" />
 
-      {/* HEADER SECTION */}
-      <View style={localStyles.header}>
-        <View>
-          <Text style={localStyles.headerTitle}>Thiết bị LoRa</Text>
-          <Text style={localStyles.headerSubTitle}>Tìm thấy {devices.length} thiết bị mới xung quanh</Text>
-        </View>
+      {/* HEADER */}
+      <View style={localStyles.minimalHeader}>
         <TouchableOpacity 
-          onPress={handleRefresh} 
-          disabled={isSyncing}
-          style={localStyles.refreshCircle}
+          onPress={handleExit} 
+          style={localStyles.backBtn}
+          disabled={isAdding}
+        >
+          <MaterialIcons name="close" size={24} color={isAdding ? "#CBD5E1" : "#1F2937"} />
+        </TouchableOpacity>
+        
+        <View style={localStyles.headerTextCenter}>
+          <Text style={localStyles.headerTitle}>Đang quét thiết bị</Text>
+          <Text style={localStyles.headerSub}>Gateway: {serial}</Text>
+        </View>
+
+        <TouchableOpacity 
+          style={localStyles.syncBtn} 
+          onPress={handleManualRefresh}
+          disabled={isSyncing || isAdding}
         >
           {isSyncing ? (
             <ActivityIndicator size="small" color="#2563EB" />
           ) : (
-            <MaterialIcons name="sync" size={24} color="#2563EB" />
+            <MaterialIcons name="sync" size={22} color={isAdding ? "#CBD5E1" : "#2563EB"} />
           )}
         </TouchableOpacity>
       </View>
 
       <FlatList
         data={devices}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item, index) => item.SENSOR_ID?.toString() || index.toString()}
         renderItem={renderItem}
-        contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
-        showsVerticalScrollIndicator={false}
-        ListEmptyComponent={() => !isSyncing && (
+        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 10, paddingBottom: 100 }}
+        ListEmptyComponent={() => (
           <View style={localStyles.emptyContainer}>
-            <MaterialIcons name="router" size={60} color="#D1D5DB" />
-            <Text style={{ color: '#9CA3AF', marginTop: 10 }}>Chưa nhận được tín hiệu LoRa nào</Text>
+            <ActivityIndicator size="large" color="#CBD5E1" style={{ marginBottom: 15 }} />
+            <Text style={localStyles.emptyText}>Đang chờ thiết bị LoRa phản hồi...</Text>
+            <Text style={{ color: '#CBD5E1', fontSize: 11, marginTop: 5 }}>Tự động cập nhật mỗi 10s</Text>
           </View>
         )}
       />
 
-      {/* FIXED FOOTER BUTTON */}
-      {devices.length > 0 && (
-        <Animated.View entering={FadeInDown.duration(500)} style={localStyles.footer}>
-          <TouchableOpacity 
-            style={localStyles.mainButton}
-            onPress={() => console.log('Thêm tất cả thiết bị LoRa')}
-            activeOpacity={0.8}
-          >
-            <MaterialIcons name="playlist-add-check" size={24} color="#fff" />
-            <Text style={localStyles.mainButtonText}>THÊM TẤT CẢ THIẾT BỊ</Text>
-          </TouchableOpacity>
-        </Animated.View>
-      )}
+      {/* FOOTER */}
+      <Animated.View entering={FadeInDown} style={localStyles.footer}>
+        <TouchableOpacity 
+          style={[localStyles.exitBtn, isAdding && { backgroundColor: '#94A3B8' }]} 
+          activeOpacity={0.8}
+          onPress={handleExit}
+          disabled={isAdding}
+        >
+          <MaterialIcons name="power-settings-new" size={20} color="#fff" style={{marginRight: 8}} />
+          <Text style={localStyles.exitBtnText}>THOÁT CHẾ ĐỘ GHÉP NỐI</Text>
+        </TouchableOpacity>
+      </Animated.View>
     </SafeAreaView>
   );
 }
 
 const localStyles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F3F4F6' },
-  header: {
+  container: { flex: 1, backgroundColor: '#F8FAFC' },
+  minimalHeader: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 20,
+    paddingHorizontal: 16,
+    height: 60,
     backgroundColor: '#fff',
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
   },
-  headerTitle: { fontSize: 22, fontWeight: 'bold', color: '#111827' },
-  headerSubTitle: { fontSize: 13, color: '#6B7280', marginTop: 4 },
-  refreshCircle: {
-    width: 45,
-    height: 45,
-    borderRadius: 22.5,
-    backgroundColor: '#EFF6FF',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  backBtn: { width: 40, height: 40, justifyContent: 'center' },
+  headerTextCenter: { alignItems: 'center' },
+  headerTitle: { fontSize: 17, fontWeight: '700', color: '#1F2937' },
+  headerSub: { fontSize: 11, color: '#64748B', fontWeight: '500' },
+  syncBtn: { width: 40, height: 40, justifyContent: 'center', alignItems: 'flex-end' },
   deviceCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#fff',
-    padding: 15,
-    borderRadius: 16,
-    marginBottom: 12,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowOffset: { width: 0, height: 2 },
+    padding: 12,
+    borderRadius: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
   },
   iconBox: {
-    width: 50,
-    height: 50,
-    borderRadius: 12,
+    width: 42,
+    height: 42,
+    borderRadius: 10,
+    backgroundColor: '#EFF6FF',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  deviceName: { fontSize: 16, fontWeight: 'bold', color: '#1F2937' },
-  deviceInfo: { fontSize: 12, color: '#6B7280', marginTop: 2 },
-  signalRow: { flexDirection: 'row', alignItems: 'center', marginTop: 6 },
-  rssiText: { fontSize: 11, fontWeight: '600', marginLeft: 4 },
-  addButton: {
-    backgroundColor: '#2563EB',
-    width: 40,
-    height: 40,
+  deviceName: { fontSize: 15, fontWeight: '600', color: '#1F2937' },
+  deviceInfo: { fontSize: 12, color: '#94A3B8', marginTop: 2 },
+  addSmallBtn: {
+    width: 36,
+    height: 36,
     borderRadius: 10,
+    backgroundColor: '#F0F7FF',
     justifyContent: 'center',
     alignItems: 'center',
   },
   footer: {
     position: 'absolute',
     bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: '#fff',
+    width: '100%',
     padding: 20,
-    borderTopWidth: 1,
-    borderColor: '#E5E7EB',
+    backgroundColor: 'rgba(248, 250, 252, 0.9)',
   },
-  mainButton: {
-    backgroundColor: '#2563EB',
-    flexDirection: 'row',
-    height: 55,
-    borderRadius: 15,
+  exitBtn: {
+    backgroundColor: '#1E293B',
+    height: 54,
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 8,
-    shadowColor: '#2563EB',
-    shadowOpacity: 0.4,
-    shadowRadius: 10,
+    flexDirection: 'row',
+    elevation: 5,
   },
-  mainButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold', marginLeft: 10 },
+  exitBtnText: { color: '#fff', fontSize: 14, fontWeight: 'bold' },
   emptyContainer: { alignItems: 'center', marginTop: 100 },
+  emptyText: { color: '#94A3B8', fontSize: 14, marginTop: 10 },
 });

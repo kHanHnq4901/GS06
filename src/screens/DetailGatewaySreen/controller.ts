@@ -4,7 +4,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useAppDispatch, useAppSelector } from '../../../store/hooks';
 import { login } from '../../../store/smartHomeSlice';
 import { getCurrentLanguageTranslations } from '../../../utils/localization';
-
+export type TabType = 'DEVICE' | 'LINK';
 export const useLoginController = () => {
     const [phone, setPhone] = useState('');
     const [password, setPassword] = useState('');

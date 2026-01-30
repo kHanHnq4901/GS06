@@ -7,6 +7,7 @@ export const vi = {
   config_wifi_gateway: "Cấu hình WiFi Gateway",
   manager_home: "Quản lý nhà",
   create_qr_gateway: "Tạo mã QR Gateway",
+  add_device: "Thêm thiết bị",
   // Common
   hello: "Xin chào",
   cancel: "Hủy",

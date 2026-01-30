@@ -1,18 +1,12 @@
-import React, { useState } from 'react';
-import { View, FlatList, StyleSheet, TouchableOpacity, Text as RNText } from 'react-native';
+import React, { useState, useEffect, useMemo } from 'react';
+import { View, FlatList, StyleSheet, TouchableOpacity, Text as RNText, ActivityIndicator } from 'react-native';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { getFireAlarmHistory, getGatewayHeartbeatHistory } from '../../services/api/common';
+// Import 2 hàm API của bạn
 
-// --- MOCK DATA: Lịch sử Gateway ---
-const GATEWAY_HISTORY = [
-  { id: '1', time: '14:30', date: 'Hôm nay', type: 'ERROR', title: 'Mất kết nối Internet', detail: 'Wifi Signal: 0', value: 'Offline' },
-  { id: '2', time: '14:25', date: 'Hôm nay', type: 'INFO', title: 'Báo cáo định kỳ', detail: 'Pin: 12.4V • Nhiệt độ: 36°C', value: 'Online' },
-  { id: '3', time: '10:00', date: 'Hôm nay', type: 'WARNING', title: 'Chuyển nguồn dự phòng', detail: 'Nguồn chính mất', value: 'Backup' },
-  { id: '4', time: '08:00', date: 'Hôm nay', type: 'INFO', title: 'Khởi động lại', detail: 'Hệ thống reset', value: 'Reboot' },
-  { id: '5', time: '22:00', date: 'Hôm qua', type: 'INFO', title: 'Báo cáo định kỳ', detail: 'Pin: 12.5V • Nhiệt độ: 34°C', value: 'Online' },
-];
 
 const FILTER_TABS = ['Tất cả', 'Lỗi', 'Cảnh báo', 'Thông tin'];
 
@@ -21,13 +15,88 @@ export function HistoryGatewayScreen() {
   const route = useRoute();
   const [activeTab, setActiveTab] = useState('Tất cả');
   
-  // Lấy thông tin gateway từ màn hình trước (nếu có)
-  const gatewayInfo = route.params || { name: 'Gateway Tầng 1', serial: 'GW-888222' };
+  // Trạng thái dữ liệu
+  const [historyData, setHistoryData] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Lấy gatewayId từ params truyền vào
+  const { gatewayId, serial } = route.params as { gatewayId: string,serial: string };
+  useEffect(() => {
+    loadData();
+  }, [gatewayId]);
+
+  const loadData = async () => {
+  try {
+    setIsLoading(true);
+    
+    // 1. Gọi API
+    const [heartbeatRes, alarmRes] = await Promise.all([
+      getGatewayHeartbeatHistory(gatewayId, 20),
+      getFireAlarmHistory(gatewayId)
+    ]);
+
+    // LƯU Ý: Phải truy cập vào .DATA vì cấu trúc API trả về { CODE, MESSAGE, DATA }
+    const rawHeartbeats = heartbeatRes?.DATA || [];
+    const rawAlarms = alarmRes?.DATA || [];
+
+    // 2. Format Heartbeat (Sử dụng các trường UPTIME, BATTERY, WIFI_RSSI từ C#)
+    const formattedHeartbeats = rawHeartbeats.map((hb: any) => ({
+      id: `hb-${hb.TIME_STAMP}-${Math.random()}`,
+      // Chuyển đổi Unix Timestamp (giây) sang Date object
+      time: new Date(hb.TIME_STAMP * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      date: new Date(hb.TIME_STAMP * 1000).toLocaleDateString('vi-VN'),
+      type: 'INFO',
+      title: 'Báo cáo định kỳ',
+      detail: `Pin: ${hb.BATTERY}% • Wifi: ${hb.WIFI_RSSI}dBm • Temp: ${hb.TEMERATURE}°C`,
+      value: 'Online',
+    }));
+
+    // 3. Format Fire Alarm (Dựa trên trường ACTION: START, END, CLEAR)
+    const formattedAlarms = rawAlarms.map((al: any) => {
+      let statusInfo = { type: 'WARNING', title: 'Cảnh báo cháy', val: al.ACTION };
+      
+      if (al.ACTION === 'START') statusInfo = { type: 'ERROR', title: 'BÁO CHÁY KHẨN CẤP', val: '🔥 Start' };
+      if (al.ACTION === 'CLEAR') statusInfo = { type: 'INFO', title: 'Đã xóa cảnh báo', val: 'Clear' };
+      if (al.ACTION === 'END') statusInfo = { type: 'WARNING', title: 'Kết thúc sự cố', val: 'Ended' };
+
+      return {
+        id: `al-${al.TIME_STAMP}-${Math.random()}`,
+        time: new Date(al.TIME_STAMP * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        date: new Date(al.TIME_STAMP * 1000).toLocaleDateString('vi-VN'),
+        type: statusInfo.type,
+        title: statusInfo.title,
+        detail: `Mã lỗi: ${al.MSGID} • ID Nguồn: ${al.SRCID}`,
+        value: statusInfo.val,
+      };
+    });
+
+    // 4. Gộp và Sắp xếp theo thời gian mới nhất lên đầu
+    const combined = [...formattedAlarms, ...formattedHeartbeats].sort((a, b) => {
+      // Vì id có chứa timestamp hoặc bạn có thể lưu timestamp gốc để so sánh
+      return b.id.localeCompare(a.id); 
+    });
+
+    setHistoryData(combined);
+  } catch (error) {
+    console.error("❌ Lỗi khi tải lịch sử:", error);
+  } finally {
+    setIsLoading(false);
+  }
+};
+
+  // Logic Lọc dữ liệu dựa trên Tab
+  const filteredData = useMemo(() => {
+    if (activeTab === 'Tất cả') return historyData;
+    if (activeTab === 'Lỗi') return historyData.filter(i => i.type === 'ERROR');
+    if (activeTab === 'Cảnh báo') return historyData.filter(i => i.type === 'WARNING');
+    if (activeTab === 'Thông tin') return historyData.filter(i => i.type === 'INFO');
+    return historyData;
+  }, [activeTab, historyData]);
 
   const getIcon = (type: string) => {
     switch (type) {
       case 'ERROR': return { name: 'wifi-off', color: '#EF4444', bg: '#FEE2E2' };
-      case 'WARNING': return { name: 'electrical-services', color: '#F59E0B', bg: '#FEF3C7' };
+      case 'WARNING': return { name: 'local-fire-department', color: '#F97316', bg: '#FFEDD5' };
       default: return { name: 'check-circle', color: '#10B981', bg: '#D1FAE5' };
     }
   };
@@ -35,14 +104,12 @@ export function HistoryGatewayScreen() {
   const renderItem = ({ item, index }: { item: any, index: number }) => {
     const iconData = getIcon(item.type);
     return (
-      <Animated.View entering={FadeInDown.delay(index * 100)} style={styles.timelineItem}>
-        {/* Cột thời gian */}
+      <Animated.View entering={FadeInDown.delay(index * 50)} style={styles.timelineItem}>
         <View style={styles.timeCol}>
           <RNText style={styles.timeText}>{item.time}</RNText>
           <RNText style={styles.dateText}>{item.date}</RNText>
         </View>
 
-        {/* Đường kẻ dọc + Icon */}
         <View style={styles.timelineLineContainer}>
            <View style={styles.line} />
            <View style={[styles.iconBubble, { backgroundColor: iconData.bg }]}>
@@ -50,7 +117,6 @@ export function HistoryGatewayScreen() {
            </View>
         </View>
 
-        {/* Nội dung */}
         <View style={styles.contentCard}>
           <View style={{flexDirection: 'row', justifyContent: 'space-between'}}>
              <RNText style={styles.title}>{item.title}</RNText>
@@ -66,14 +132,14 @@ export function HistoryGatewayScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
+      {/* Header giữ nguyên */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <MaterialIcons name="arrow-back" size={24} color="#374151" />
         </TouchableOpacity>
         <View style={{marginLeft: 15}}>
            <RNText style={styles.headerTitle}>Lịch sử hoạt động</RNText>
-           <RNText style={styles.headerSub}>{gatewayInfo.name} ({gatewayInfo.serial})</RNText>
+           <RNText style={styles.headerSub}>{gatewayId}</RNText>
         </View>
       </View>
 
@@ -90,18 +156,22 @@ export function HistoryGatewayScreen() {
         ))}
       </View>
 
-      {/* List */}
-      <FlatList
-        data={GATEWAY_HISTORY}
-        keyExtractor={item => item.id}
-        renderItem={renderItem}
-        contentContainerStyle={{ padding: 16 }}
-        showsVerticalScrollIndicator={false}
-      />
+      {/* List hoặc Loading */}
+      {isLoading ? (
+        <View style={{flex: 1, justifyContent: 'center'}}><ActivityIndicator color="#2563EB" /></View>
+      ) : (
+        <FlatList
+          data={filteredData}
+          keyExtractor={item => item.id}
+          renderItem={renderItem}
+          contentContainerStyle={{ padding: 16 }}
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={<RNText style={{textAlign: 'center', marginTop: 20, color: '#9CA3AF'}}>Không có dữ liệu lịch sử</RNText>}
+        />
+      )}
     </SafeAreaView>
   );
 }
-
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F9FAFB' },
   header: { flexDirection: 'row', alignItems: 'center', padding: 16, backgroundColor: '#fff', borderBottomWidth: 1, borderColor: '#E5E7EB' },

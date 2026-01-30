@@ -3,7 +3,6 @@ import { StyleSheet, Dimensions } from "react-native";
 const { width } = Dimensions.get('window');
 
 export const styles = StyleSheet.create({
-  // --- LAYOUT CHUNG ---
   safeArea: {
     flex: 1,
     backgroundColor: '#fff',
@@ -540,4 +539,22 @@ export const styles = StyleSheet.create({
     fontSize: 14,
     color: '#374151',
   },
+  deviceItem: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  backgroundColor: '#fff',
+  marginHorizontal: 16,
+  marginTop: 10,
+  padding: 15,
+  borderRadius: 12,
+  elevation: 2,
+  shadowColor: '#000',
+  shadowOpacity: 0.05,
+},
+deviceTitle: {
+  fontSize: 15,
+  fontWeight: 'bold',
+  color: '#1E293B',
+},
+
 });

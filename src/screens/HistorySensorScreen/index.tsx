@@ -1,33 +1,105 @@
-import React from 'react';
-import { View, FlatList, StyleSheet, TouchableOpacity, Text as RNText } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { 
+  View, 
+  FlatList, 
+  StyleSheet, 
+  TouchableOpacity, 
+  Text as RNText, 
+  ActivityIndicator, 
+  RefreshControl 
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import dayjs from 'dayjs';
 
-// --- MOCK DATA ---
-const SENSOR_HISTORY = [
-  { id: '1', time: '14:32', date: 'Hôm nay', type: 'ALARM', title: 'CẢNH BÁO KHÓI', detail: 'Nồng độ khói: Cao', rf: '-45dBm', battery: '90%' },
-
-  { id: '3', time: '12:00', date: 'Hôm nay', type: 'INFO', title: 'Định kỳ', detail: 'Trạng thái bình thường', rf: '-48dBm', battery: '89%' },
-  { id: '4', time: '09:15', date: 'Hôm qua', type: 'ERROR', title: 'Pin yếu', detail: 'Vui lòng thay pin', rf: '-50dBm', battery: '15%' },
-];
+// Import API
+import { getNodeStatusHistory } from '../../services/api/common';
 
 export function HistorySensorScreen() {
   const navigation = useNavigation();
   const route = useRoute();
-  const device = route.params || { name: 'Đầu báo Khói P.Khách', rf: '-45dBm', battery: '90%' };
+  
+  // Lấy params truyền từ màn hình danh sách thiết bị
+  const { nodeId, deviceName } = (route.params as any) || { nodeId: 0, deviceName: 'Thiết bị' };
+
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [historyData, setHistoryData] = useState([]);
+  const [summary, setSummary] = useState({
+    alarmCount: 0,
+    totalEvents: 0,
+    battery: '--',
+    rf: '--'
+  });
+
+  // Hàm gọi API lấy dữ liệu
+  const fetchData = async () => {
+    try {
+      const response = await getNodeStatusHistory(nodeId);
+      
+      if (response && response.CODE === 1) {
+        const rawData = response.DATA || [];
+        
+        // Map dữ liệu từ API sang định dạng UI
+        const mappedData = rawData.map((item: any) => ({
+          id: item.MSGID?.toString() || Math.random().toString(),
+          time: dayjs(item.TIME_STAMP).format('HH:mm'),
+          date: dayjs(item.TIME_STAMP).format('DD/MM/YYYY'),
+          // Logic: Nếu FAULT > 0 là báo động, hoặc tùy theo quy định của bạn
+          type: item.FAULT > 0 ? 'ALARM' : (item.BATTERY < 20 ? 'ERROR' : 'INFO'),
+          title: item.FAULT > 0 ? 'CẢNH BÁO KHÓI' : (item.BATTERY < 20 ? 'PIN YẾU' : 'ĐỊNH KỲ'),
+          detail: item.ONLINE ? 'Trạng thái ổn định' : 'Mất kết nối',
+          rf: `${item.RSSI || 0}dBm`,
+          battery: `${item.BATTERY || 0}%`,
+        }));
+
+        setHistoryData(mappedData);
+
+        // Cập nhật thông số tóm tắt (lấy từ bản ghi mới nhất)
+        if (rawData.length > 0) {
+          const latest = rawData[0];
+          setSummary({
+            alarmCount: rawData.filter((x: any) => x.FAULT > 0).length,
+            totalEvents: rawData.length,
+            battery: `${latest.BATTERY}%`,
+            rf: `${latest.RSSI}`
+          });
+        }
+      }
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, [nodeId]);
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchData();
+  }, []);
 
   const renderItem = ({ item, index }: { item: any, index: number }) => {
     const isAlarm = item.type === 'ALARM';
+    const isError = item.type === 'ERROR';
+    
     return (
-      <Animated.View entering={FadeInDown.delay(index * 100)} style={[styles.card, isAlarm && styles.alarmCard]}>
+      <Animated.View 
+        entering={FadeInDown.delay(index * 50)} 
+        style={[styles.card, isAlarm && styles.alarmCard]}
+      >
         <View style={styles.cardHeader}>
            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               <MaterialIcons 
-                name={isAlarm ? "notifications-active" : item.type === 'ERROR' ? "battery-alert" : "info"} 
+                name={isAlarm ? "notifications-active" : isError ? "battery-alert" : "info"} 
                 size={20} 
-                color={isAlarm ? "#DC2626" : item.type === 'ERROR' ? "#F59E0B" : "#2563EB"} 
+                color={isAlarm ? "#DC2626" : isError ? "#F59E0B" : "#2563EB"} 
               />
               <RNText style={[styles.cardTitle, isAlarm && { color: '#DC2626' }]}>{item.title}</RNText>
            </View>
@@ -58,105 +130,87 @@ export function HistorySensorScreen() {
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <MaterialIcons name="arrow-back" size={24} color="#374151" />
         </TouchableOpacity>
-        <View style={{marginLeft: 15}}>
+        <View style={{ marginLeft: 15 }}>
            <RNText style={styles.headerTitle}>Thông tin thiết bị</RNText>
-           <RNText style={styles.headerSub}>{device.name}</RNText>
+           <RNText style={styles.headerSub}>{deviceName}</RNText>
         </View>
-        <TouchableOpacity style={{marginLeft: 'auto'}}> 
+        <TouchableOpacity style={{ marginLeft: 'auto' }}> 
            <MaterialIcons name="calendar-today" size={20} color="#6B7280" />
         </TouchableOpacity>
       </View>
 
-      {/* SUMMARY CONTAINER - ĐÃ THÊM PIN VÀ RF */}
+      {/* SUMMARY */}
       <View style={styles.summaryContainer}>
-         {/* Báo động */}
          <View style={styles.summaryItem}>
             <MaterialIcons name="notifications-active" size={18} color="#DC2626" />
-            <RNText style={[styles.summaryValue, { color: '#DC2626' }]}>2</RNText>
+            <RNText style={[styles.summaryValue, { color: '#DC2626' }]}>{summary.alarmCount}</RNText>
             <RNText style={styles.summaryLabel}>Báo động</RNText>
          </View>
-
          <View style={styles.summaryLine} />
-
-         {/* Tổng Sự kiện */}
          <View style={styles.summaryItem}>
             <MaterialIcons name="event-note" size={18} color="#4B5563" />
-            <RNText style={styles.summaryValue}>24</RNText>
+            <RNText style={styles.summaryValue}>{summary.totalEvents}</RNText>
             <RNText style={styles.summaryLabel}>Sự kiện</RNText>
          </View>
-
          <View style={styles.summaryLine} />
-
-         {/* Trạng thái Pin */}
          <View style={styles.summaryItem}>
             <MaterialIcons name="battery-charging-full" size={18} color="#059669" />
-            <RNText style={[styles.summaryValue, { color: '#059669' }]}>{device.battery || '90%'}</RNText>
+            <RNText style={[styles.summaryValue, { color: '#059669' }]}>{summary.battery}</RNText>
             <RNText style={styles.summaryLabel}>Pin</RNText>
          </View>
-
          <View style={styles.summaryLine} />
-
-         {/* Tín hiệu sóng */}
          <View style={styles.summaryItem}>
             <MaterialIcons name="settings-input-antenna" size={18} color="#2563EB" />
-            <RNText style={[styles.summaryValue, { color: '#2563EB' }]}>{device.rf || '-45'}</RNText>
+            <RNText style={[styles.summaryValue, { color: '#2563EB' }]}>{summary.rf}</RNText>
             <RNText style={styles.summaryLabel}>Sóng RF</RNText>
          </View>
       </View>
 
-      <FlatList
-        data={SENSOR_HISTORY}
-        keyExtractor={item => item.id}
-        renderItem={renderItem}
-        contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
-        showsVerticalScrollIndicator={false}
-      />
+      {loading ? (
+        <ActivityIndicator size="large" color="#2563EB" style={{ marginTop: 50 }} />
+      ) : (
+        <FlatList
+          data={historyData}
+          keyExtractor={item => item.id}
+          renderItem={renderItem}
+          contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+          ListEmptyComponent={
+            <RNText style={{ textAlign: 'center', marginTop: 50, color: '#9CA3AF' }}>
+              Không có dữ liệu lịch sử
+            </RNText>
+          }
+        />
+      )}
 
-      {/* NÚT KIỂM TRA THIẾT BỊ Ở CUỐI */}
+      {/* FOOTER */}
       <View style={styles.footer}>
          <TouchableOpacity 
             style={styles.checkButton}
-            onPress={() => console.log("Kiểm tra thiết bị")}
+            onPress={() => onRefresh()}
          >
-            <MaterialIcons name="check-circle" size={22} color="#fff" />
-            <RNText style={styles.checkButtonText}>Kiểm tra thiết bị ngay</RNText>
+            <MaterialIcons name="refresh" size={22} color="#fff" />
+            <RNText style={styles.checkButtonText}>Làm mới dữ liệu</RNText>
          </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
 }
 
+// Giữ nguyên phần styles của bạn
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F9FAFB' },
-  header: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    padding: 16, 
-    backgroundColor: '#fff', 
-    borderBottomWidth: 1, 
-    borderColor: '#E5E7EB' 
-  },
+  header: { flexDirection: 'row', alignItems: 'center', padding: 16, backgroundColor: '#fff', borderBottomWidth: 1, borderColor: '#E5E7EB' },
   headerTitle: { fontSize: 17, fontWeight: 'bold', color: '#111827' },
   headerSub: { fontSize: 12, color: '#6B7280' },
-
-  summaryContainer: { 
-    flexDirection: 'row', 
-    backgroundColor: '#fff', 
-    margin: 16, 
-    borderRadius: 12, 
-    paddingVertical: 15,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 5,
-  },
+  summaryContainer: { flexDirection: 'row', backgroundColor: '#fff', margin: 16, borderRadius: 12, paddingVertical: 15, borderWidth: 1, borderColor: '#E5E7EB', elevation: 2 },
   summaryItem: { flex: 1, alignItems: 'center' },
   summaryLine: { width: 1, height: '70%', backgroundColor: '#E5E7EB', alignSelf: 'center' },
   summaryLabel: { fontSize: 10, color: '#6B7280', textTransform: 'uppercase', fontWeight: '600' },
   summaryValue: { fontSize: 15, fontWeight: 'bold', color: '#111827', marginTop: 4 },
-
   card: { backgroundColor: '#fff', borderRadius: 10, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: '#E5E7EB' },
   alarmCard: { borderColor: '#FECACA', backgroundColor: '#FEF2F2' },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
@@ -168,34 +222,7 @@ const styles = StyleSheet.create({
   statsRow: { flexDirection: 'row' },
   statItem: { flexDirection: 'row', alignItems: 'center', marginLeft: 10, backgroundColor: '#F3F4F6', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
   statText: { fontSize: 10, color: '#6B7280', marginLeft: 4 },
-
-  footer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: '#fff',
-    padding: 16,
-    borderTopWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  checkButton: {
-    backgroundColor: '#2563EB',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 14,
-    borderRadius: 10,
-    elevation: 3,
-    shadowColor: '#2563EB',
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
-    shadowOffset: { width: 0, height: 4 },
-  },
-  checkButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginLeft: 8,
-  }
+  footer: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#fff', padding: 16, borderTopWidth: 1, borderColor: '#E5E7EB' },
+  checkButton: { backgroundColor: '#2563EB', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 14, borderRadius: 10 },
+  checkButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold', marginLeft: 8 }
 });
