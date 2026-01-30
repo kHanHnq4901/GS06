@@ -135,3 +135,21 @@ export const clearLinkGatewayStatus = async (gatewayId: number) => {
   });
   return res.data;
 };
+export const declareGateway = async (gatewayId: number, homeId: number) => {
+  try {
+    const res = await axios.post(`${API_BASE_URL}/DeclareGateway`, null, {
+      params: { 
+        GatewayId: gatewayId, 
+        HomeId: homeId 
+      }
+    });
+    return res.data;
+  } catch (error) {
+    console.error("Declare Gateway Error:", error);
+    return { 
+      CODE: -1, 
+      MESSAGE_VI: "Lỗi kết nối máy chủ", 
+      MESSAGE_EN: "Server connection error" 
+    };
+  }
+};

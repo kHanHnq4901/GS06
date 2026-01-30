@@ -221,7 +221,10 @@ export function HomeScreen() {
             if (item.HOME_ID === 'MANAGE_ACTION') navigation.navigate('ManagerHomeScreen');
             else setSelectedHouse(item);
         }}
-        onPressAdd={() => navigation.navigate('ConfigDevice')} 
+        // CẬP NHẬT TẠI ĐÂY: Gửi kèm HomeId của nhà đang được chọn
+        onPressAdd={() => navigation.navigate('ConfigDevice', { 
+          homeId: selectedHouse?.HOME_ID 
+        })} 
       />
       
       {loading && getCurrentData().length === 0 ? (
