@@ -60,7 +60,6 @@ export const GatewayItem = React.memo(({ item, index, navigation, onHandlePress,
     }
   };
 
-  // --- LOGIC 2: GỠ THIẾT BỊ (XÓA) ---
   const handleRemoveGateway = () => {
     Alert.alert(
       "Xác nhận gỡ",

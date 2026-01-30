@@ -15,22 +15,22 @@ import MaterialIcons from '@react-native-vector-icons/material-icons';
 import SelectDropdown from 'react-native-select-dropdown';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import moment from 'moment';
 
-// API Services
+// API & MQTT Services
 import { 
   getSensorsByGateway, 
   getLinkGatewayStatus, 
   getNodeStatusHistory,
 } from '../../services/api/common';
+import { MqttProtocolService } from '../../services/mqtt';
 
-// Tái sử dụng các Components đã tách
-import { SensorItem } from '../../component/SensorItem';
-import { LinkItem } from '../../component/LinkItem';
+// Components
+import { SensorItem } from '../HomeScreen/components/SensorItem';
+import { LinkItem } from '../HomeScreen/components/LinkItem';
 import { styles } from './styles';
 import { TabType } from './types';
-
-
-import { handleButton } from './handleButton'; // Import file vừa tạo
+import { handleButton } from './handleButton';
 
 export function DetailGatewayScreen() {
   const navigation = useNavigation<any>();
@@ -40,9 +40,52 @@ export function DetailGatewayScreen() {
 
   const [activeTab, setActiveTab] = useState<TabType>('DEVICE');
   const [loading, setLoading] = useState(false);
+  const [checkingAll, setCheckingAll] = useState(false); 
   const [sensors, setSensors] = useState<any[]>([]);
   const [links, setLinks] = useState<any[]>([]);
 
+  // 1. Logic điều hướng sang lịch sử sensor
+  const handlePressSensor = (sensor: any) => {
+    const nodeId = sensor?.SENSOR_ID ?? sensor?.NODE_ID;
+    const deviceName = sensor?.DEVICE_NAME || `Thiết bị ${nodeId}`;
+    navigation.navigate('HistorySensor', { nodeId, deviceName, gatewayId });
+  };
+
+  // 2. Logic kiểm tra tất cả thiết bị (MQTT scope 0)
+  const handleTestAllDevices = async () => {
+    if (!gatewayId || gatewayId === 'N/A') return;
+
+    Alert.alert(
+      "Xác nhận",
+      "Gửi lệnh kiểm tra tới toàn bộ thiết bị thuộc Gateway này?",
+      [
+        { text: "Hủy", style: "cancel" },
+        { 
+          text: "Bắt đầu", 
+          onPress: async () => {
+            setCheckingAll(true);
+            try {
+              const response = await MqttProtocolService.testDevice(gatewayId, 0, "");
+              
+              if (response.status === 'success') {
+                Alert.alert("Thành công", "Lệnh kiểm tra toàn hệ thống đã được gửi.");
+              } else if (response.status === 'failure') {
+                Alert.alert("Thất bại", "Gateway phản hồi lỗi xử lý.");
+              } else {
+                Alert.alert("Lỗi", "Không nhận được phản hồi từ Gateway (Timeout).");
+              }
+            } catch (error) {
+              Alert.alert("Lỗi", "Lỗi kết nối MQTT.");
+            } finally {
+              setCheckingAll(false);
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  // 3. Hàm lấy dữ liệu Sensor kèm Status mới nhất
   const fetchData = useCallback(async () => {
     if (!gatewayId || gatewayId === 'N/A') return;
     setLoading(true);
@@ -53,14 +96,23 @@ export function DetailGatewayScreen() {
       ]);
 
       if (resSensors.CODE === 1) {
+        // Lấy thông tin bản ghi cuối cho từng Sensor để hiển thị Pin/Sóng/Online
         const sensorsWithStatus = await Promise.all(
           resSensors.DATA.map(async (s: any) => {
-            const stRes = await getNodeStatusHistory(s.SENSOR_ID, 1);
-            return { 
-              ...s, 
-              ONLINE: stRes.DATA?.[0]?.ONLINE ?? 0, 
-              latestStatus: stRes.DATA?.[0] || null 
-            };
+            try {
+              const stRes = await getNodeStatusHistory(s.SENSOR_ID, 1);
+              const latest = stRes.DATA?.[0] || null;
+              return { 
+                ...s, 
+                ONLINE: latest?.ONLINE ?? 0, 
+                latestStatus: latest,
+                BATTERY: latest?.BATTERY ?? s.BATTERY,
+                RSSI: latest?.RSSI ?? s.RSSI,
+                TIME_STAMP: latest?.TIME_STAMP || null
+              };
+            } catch (err) {
+              return s;
+            }
           })
         );
         setSensors(sensorsWithStatus);
@@ -75,12 +127,7 @@ export function DetailGatewayScreen() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Khởi tạo các handlers từ file tách riêng
-  const { onRename, onRemove, onClearLink, onActionMenu } = handleButton(
-    gatewayId, 
-    fetchData, 
-    navigation
-  );
+  const { onRename, onRemove, onClearLink, onActionMenu } = handleButton(gatewayId, fetchData, navigation);
 
   const actionMenu = [
     { title: 'Thêm thiết bị', icon: 'add-circle-outline', action: 'ADD_DEVICE' },
@@ -95,18 +142,14 @@ export function DetailGatewayScreen() {
             <MaterialIcons name="arrow-back-ios" size={22} color="#1E293B" />
           </TouchableOpacity>
         </View>
-
         <View style={styles.centerColumn}>
           <Text numberOfLines={1} style={styles.headerTitle}>ID: {gatewayId}</Text>
           <Text numberOfLines={1} style={styles.headerSub}>{item?.GATEWAY_NAME || 'Chi tiết Gateway'}</Text>
         </View>
-
         <View style={styles.sideColumn}>
           <SelectDropdown
             data={actionMenu}
-            onSelect={(selectedItem) => onActionMenu(selectedItem.action)} // Sử dụng handler mới
-            dropdownStyle={styles.dropdownStyle}
-            dropdownOverlayColor="rgba(0,0,0,0.1)"
+            onSelect={(selectedItem) => onActionMenu(selectedItem.action)}
             renderButton={() => (
               <View style={styles.rightBtn}>
                 <MaterialIcons name="add-circle-outline" size={28} color="#2563EB" />
@@ -146,6 +189,7 @@ export function DetailGatewayScreen() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaView style={styles.container} edges={['top']}>
         <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+        
         <FlatList
           data={activeTab === 'DEVICE' ? sensors : links}
           keyExtractor={(i, idx) => idx.toString()}
@@ -153,7 +197,14 @@ export function DetailGatewayScreen() {
           refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchData} tintColor="#2563EB" />}
           renderItem={({ item, index }) => (
             activeTab === 'DEVICE' 
-              ? <SensorItem item={item} index={index} onRename={onRename} onRemove={onRemove}  onPress={handlePressSensor}/>
+              ? <SensorItem 
+                  item={item} 
+                  index={index} 
+                  onRename={onRename} 
+                  onRemove={onRemove} 
+                  onRefresh={fetchData}
+                  onPress={() => handlePressSensor(item)}
+                />
               : <LinkItem item={item} index={index} onClear={onClearLink} />
           )}
           ListEmptyComponent={
@@ -166,10 +217,61 @@ export function DetailGatewayScreen() {
               <ActivityIndicator style={{ marginTop: 30 }} color="#2563EB" />
             )
           }
-          contentContainerStyle={{ paddingBottom: 20 }}
+          contentContainerStyle={{ paddingBottom: activeTab === 'DEVICE' ? 100 : 20 }}
         />
+
+        {/* NÚT KIỂM TRA TẤT CẢ (DƯỚI CÙNG) */}
+        {activeTab === 'DEVICE' && sensors.length > 0 && (
+          <View style={localStyles.footerFixed}>
+            <TouchableOpacity 
+              style={[localStyles.btnCheckAll, checkingAll && { backgroundColor: '#94A3B8' }]}
+              onPress={handleTestAllDevices}
+              disabled={checkingAll}
+            >
+              {checkingAll ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <>
+                  <MaterialIcons name="fact-check" size={22} color="#fff" />
+                  <Text style={localStyles.btnCheckAllText}>Kiểm tra tất cả thiết bị</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
       </SafeAreaView>
     </GestureHandlerRootView>
   );
 }
 
+const localStyles = StyleSheet.create({
+  footerFixed: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 16,
+    backgroundColor: '#FFF',
+    borderTopWidth: 1,
+    borderColor: '#E2E8F0',
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  btnCheckAll: {
+    backgroundColor: '#2563EB',
+    height: 52,
+    borderRadius: 12,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  btnCheckAllText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginLeft: 10,
+  }
+});

@@ -6,7 +6,8 @@ import {
   TouchableOpacity, 
   Text as RNText, 
   ActivityIndicator, 
-  RefreshControl 
+  RefreshControl, 
+  Alert
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
@@ -16,17 +17,19 @@ import dayjs from 'dayjs';
 
 // Import API
 import { getNodeStatusHistory } from '../../services/api/common';
+import { MqttProtocolService } from '../../services/mqtt';
 
 export function HistorySensorScreen() {
   const navigation = useNavigation();
   const route = useRoute();
-  
-  // Lấy params truyền từ màn hình danh sách thiết bị
-  const { nodeId, deviceName } = (route.params as any) || { nodeId: 0, deviceName: 'Thiết bị' };
 
+  // Lấy params truyền từ màn hình danh sách thiết bị
+  const { nodeId, deviceName, gatewayId } = (route.params as any) || {};
+  console.log ("HistorySensorScreen - nodeId:", nodeId, "deviceName:", deviceName, "gatewayId:", gatewayId);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [historyData, setHistoryData] = useState([]);
+  const [isSending, setIsSending] = useState(false);
   const [summary, setSummary] = useState({
     alarmCount: 0,
     totalEvents: 0,
@@ -84,7 +87,30 @@ export function HistorySensorScreen() {
     setRefreshing(true);
     fetchData();
   }, []);
+  const handleTestDevice = async () => {
+    if (!gatewayId || !nodeId) {
+      Alert.alert("Lỗi", "Không tìm thấy thông tin Gateway hoặc Node ID");
+      return;
+    }
 
+    setIsSending(true);
+    try {
+      // scope: 1 là kiểm tra đơn lẻ một node, nodeId là id của cảm biến hiện tại
+      const response = await MqttProtocolService.testDevice(gatewayId, 1, nodeId);
+
+      if (response.status === 'success') {
+        Alert.alert("Thành công", "Lệnh kiểm tra đã được gửi. Vui lòng quan sát thiết bị.");
+      } else if (response.status === 'failure') {
+        Alert.alert("Thất bại", "Gateway phản hồi lỗi xử lý lệnh.");
+      } else {
+        Alert.alert("Lỗi", "Thiết bị không phản hồi (Timeout).");
+      }
+    } catch (error) {
+      Alert.alert("Lỗi", "Không thể kết nối tới Broker MQTT");
+    } finally {
+      setIsSending(false);
+    }
+  };
   const renderItem = ({ item, index }: { item: any, index: number }) => {
     const isAlarm = item.type === 'ALARM';
     const isError = item.type === 'ERROR';
@@ -189,11 +215,18 @@ export function HistorySensorScreen() {
       {/* FOOTER */}
       <View style={styles.footer}>
          <TouchableOpacity 
-            style={styles.checkButton}
-            onPress={() => onRefresh()}
+            style={[styles.checkButton, isSending && { backgroundColor: '#94A3B8' }]}
+            onPress={handleTestDevice}
+            disabled={isSending}
          >
-            <MaterialIcons name="refresh" size={22} color="#fff" />
-            <RNText style={styles.checkButtonText}>Làm mới dữ liệu</RNText>
+            {isSending ? (
+              <ActivityIndicator color="#fff" style={{ marginRight: 8 }} />
+            ) : (
+              <MaterialIcons name="playlist-add-check" size={24} color="#fff" />
+            )}
+            <RNText style={styles.checkButtonText}>
+              {isSending ? "Đang gửi lệnh..." : "Kiểm tra thiết bị ngay"}
+            </RNText>
          </TouchableOpacity>
       </View>
     </SafeAreaView>

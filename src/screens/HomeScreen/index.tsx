@@ -26,12 +26,13 @@ import {
   getLinkStatusByHomeId, 
   renameSensor, 
   removeSensor, 
-  clearLinkGatewayStatus 
+  clearLinkGatewayStatus,
+  getNodeStatusHistory 
 } from '../../services/api/common';
 import { HomeHeader } from './components/HomeHeader';
 import { GatewayItem } from './components/GatewayItem';
-import { SensorItem } from '../../component/SensorItem'; // Component chứa onPress của bạn
-import { LinkItem } from '../../component/LinkItem';
+import { SensorItem } from './components/SensorItem'; 
+import { LinkItem } from './components/LinkItem';
 
 type TabType = 'GATEWAY' | 'DEVICE' | 'LINK';
 
@@ -55,43 +56,83 @@ export function HomeScreen() {
     { HOME_ID: 'MANAGE_ACTION', HOME_NAME: '⚙️ Quản lý nhà' }
   ], [listHomes]);
 
-  // --- HÀM ĐIỀU HƯỚNG SANG LỊCH SỬ ---
-  const handlePressSensor = (item: any) => {
-    navigation.navigate('HistorySensorScreen', { 
-      nodeId: item.SENSOR_ID, 
-      deviceName: item.DEVICE_NAME
-    });
+  // --- CÁC HÀM FETCH RIÊNG BIỆT CHO TỪNG TAB ---
+
+  const fetchGateways = async (homeId: string) => {
+    const res = await getGatewaysByHomeId(homeId);
+    if (res.CODE === 1) {
+      const data = await Promise.all(res.DATA.map(async (gw: any) => {
+        const statusRes = await getGatewayHeartbeatHistory(gw.GATEWAY_ID, 1);
+        return { ...gw, latestStatus: statusRes.DATA?.[0] || null };
+      }));
+      setGateways(data);
+    }
   };
 
-  const fetchData = useCallback(async () => {
-    if (!selectedHouse?.HOME_ID || selectedHouse.HOME_ID === 'MANAGE_ACTION') return;
-    setLoading(true);
-    const homeId = selectedHouse.HOME_ID;
+  const fetchSensors = async (homeId: string) => {
+    const res = await getSensorsByHomeId(homeId);
+    if (res.CODE === 1) {
+      const sensorsWithStatus = await Promise.all(
+        res.DATA.map(async (s: any) => {
+          try {
+            const stRes = await getNodeStatusHistory(s.SENSOR_ID, 1);
+            const latest = stRes.DATA?.[0] || null;
+            return { 
+              ...s, 
+              ONLINE: latest?.ONLINE ?? 0, 
+              latestStatus: latest,
+              BATTERY: latest?.BATTERY ?? s.BATTERY,
+              RSSI: latest?.RSSI ?? s.RSSI,
+              TIME_STAMP: latest?.TIME_STAMP || null
+            };
+          } catch (err) { return s; }
+        })
+      );
+      setSensors(sensorsWithStatus);
+    }
+  };
 
+  const fetchLinks = async (homeId: string) => {
+    const res = await getLinkStatusByHomeId(homeId);
+    if (res.CODE === 1) setLinks(res.DATA);
+  };
+
+  // --- GỌI TẤT CẢ DỮ LIỆU CÙNG LÚC (DÙNG KHI VÀO MÀN HÌNH HOẶC REFRESH) ---
+  const fetchAllData = useCallback(async (isRefresh = false) => {
+    if (!selectedHouse?.HOME_ID || selectedHouse.HOME_ID === 'MANAGE_ACTION') return;
+    
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
+
+    const homeId = selectedHouse.HOME_ID;
     try {
-      if (activeTab === 'GATEWAY') {
-        const res = await getGatewaysByHomeId(homeId);
-        if (res.CODE === 1) {
-          const data = await Promise.all(res.DATA.map(async (gw: any) => {
-            const statusRes = await getGatewayHeartbeatHistory(gw.GATEWAY_ID, 1);
-            return { ...gw, latestStatus: statusRes.DATA?.[0] || null };
-          }));
-          setGateways(data);
-        }
-      } else if (activeTab === 'DEVICE') {
-        const res = await getSensorsByHomeId(homeId);
-        if (res.CODE === 1) setSensors(res.DATA);
-      } else if (activeTab === 'LINK') {
-        const res = await getLinkStatusByHomeId(homeId);
-        if (res.CODE === 1) setLinks(res.DATA);
-      }
+      // Dùng Promise.all để chạy song song 3 API
+      await Promise.all([
+        fetchGateways(homeId),
+        fetchSensors(homeId),
+        fetchLinks(homeId)
+      ]);
     } catch (e) {
-      console.error("Fetch Data Error:", e);
+      console.error("Fetch All Data Error:", e);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [selectedHouse, activeTab]);
+  }, [selectedHouse]);
+
+  // Tự động load lại dữ liệu CỦA TAB ĐÓ khi người dùng chuyển Tab
+  useEffect(() => {
+    if (selectedHouse?.HOME_ID) {
+      if (activeTab === 'GATEWAY') fetchGateways(selectedHouse.HOME_ID);
+      else if (activeTab === 'DEVICE') fetchSensors(selectedHouse.HOME_ID);
+      else if (activeTab === 'LINK') fetchLinks(selectedHouse.HOME_ID);
+    }
+  }, [activeTab]);
+
+  // Load tất cả khi đổi nhà hoặc lần đầu vào
+  useEffect(() => {
+    fetchAllData();
+  }, [selectedHouse]);
 
   useEffect(() => {
     const fetchHomes = async () => {
@@ -102,23 +143,27 @@ export function HomeScreen() {
           setListHomes(res.DATA);
           if (res.DATA.length > 0 && !selectedHouse) setSelectedHouse(res.DATA[0]);
         }
-      } catch (error) {
-        console.error("Fetch Homes Error:", error);
-      }
+      } catch (error) { console.error(error); }
     };
     fetchHomes();
   }, [user?.USER_ID]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  // --- HANDLERS CHO CÁC ACTION ---
 
-  // --- Handlers cho API ---
+  const handlePressSensor = (item: any) => {
+    const nodeId = item?.SENSOR_ID ?? item?.NODE_ID;
+    const deviceName = item?.DEVICE_NAME || `Thiết bị ${nodeId}`;
+    const gatewayId = item?.GATEWAY_ID;
+    navigation.navigate('HistorySensor', { nodeId, deviceName, gatewayId });
+  };
+
   const onRename = (item: any) => {
     Alert.prompt("Đổi tên", "Nhập tên mới", [
       { text: "Hủy" },
       { text: "Lưu", onPress: async (name) => {
           if (name) {
             const res = await renameSensor(item.SENSOR_ID, name);
-            if (res.CODE === 1) fetchData();
+            if (res.CODE === 1) fetchSensors(selectedHouse.HOME_ID);
           }
       }}
     ], "plain-text", item.DEVICE_NAME);
@@ -129,17 +174,7 @@ export function HomeScreen() {
       { text: "Hủy" },
       { text: "Xóa", style: 'destructive', onPress: async () => {
           const res = await removeSensor(id);
-          if (res.CODE === 1) fetchData();
-      }}
-    ]);
-  };
-
-  const onClearLink = (gwId: number) => {
-    Alert.alert("Xóa lịch sử", "Xóa toàn bộ liên gia của Gateway này?", [
-      { text: "Hủy" },
-      { text: "Xóa", style: 'destructive', onPress: async () => {
-          const res = await clearLinkGatewayStatus(gwId);
-          if (res.CODE === 1) fetchData();
+          if (res.CODE === 1) fetchSensors(selectedHouse.HOME_ID);
       }}
     ]);
   };
@@ -160,11 +195,7 @@ export function HomeScreen() {
             style={[styles.tabItem, activeTab === tab.id && styles.tabItemActive]} 
             onPress={() => setActiveTab(tab.id as any)}
           >
-            <MaterialIcons 
-               name={tab.icon as any} 
-               size={18} 
-               color={activeTab === tab.id ? '#2563EB' : '#6B7280'} 
-            />
+            <MaterialIcons name={tab.icon as any} size={18} color={activeTab === tab.id ? '#2563EB' : '#6B7280'} />
             <RNText style={[styles.tabText, activeTab === tab.id && styles.tabTextActive]}>
               {tab.label}
             </RNText>
@@ -186,14 +217,14 @@ export function HomeScreen() {
       <HomeHeader 
         selectedHouse={selectedHouse} 
         dropdownData={dropdownData} 
-        onSelectHouse={(item) => item.HOME_ID === 'MANAGE_ACTION' 
-          ? navigation.navigate('ManagerHomeScreen') 
-          : setSelectedHouse(item)
-        }
+        onSelectHouse={(item) => {
+            if (item.HOME_ID === 'MANAGE_ACTION') navigation.navigate('ManagerHomeScreen');
+            else setSelectedHouse(item);
+        }}
         onPressAdd={() => navigation.navigate('ConfigDevice')} 
       />
       
-      {loading && !refreshing && getCurrentData().length === 0 ? (
+      {loading && getCurrentData().length === 0 ? (
         <View style={{ flex: 1, justifyContent: 'center' }}>
           <ActivityIndicator size="large" color="#2563EB" />
         </View>
@@ -203,53 +234,32 @@ export function HomeScreen() {
           keyExtractor={(item, index) => `${activeTab}_${index}`}
           ListHeaderComponent={renderListHeader}
           refreshControl={
-            <RefreshControl 
-              refreshing={refreshing} 
-              onRefresh={() => { setRefreshing(true); fetchData(); }} 
-              tintColor="#2563EB" 
-            />
+            <RefreshControl refreshing={refreshing} onRefresh={() => fetchAllData(true)} tintColor="#2563EB" />
           }
           renderItem={({ item, index }) => {
             if (activeTab === 'GATEWAY') {
-              return (
-                <GatewayItem 
-                  item={item} 
-                  index={index} 
-                  navigation={navigation} 
-                  onHandlePress={() => setActiveTab('DEVICE')} 
-                  onRefresh={fetchData}
-                />
-              );
+              return <GatewayItem item={item} index={index} navigation={navigation} onHandlePress={() => setActiveTab('DEVICE')} onRefresh={() => fetchGateways(selectedHouse.HOME_ID)} />;
             }
-            // Trong HomeScreen.tsx
-            const handlePressSensor = (item: any) => {
-              console.log("Nhấn vào sensor:", item.SENSOR_ID); // Thêm log để kiểm tra
-              navigation.navigate('HistorySensorScreen', { 
-                nodeId: item.SENSOR_ID, 
-                deviceName: item.DEVICE_NAME || `Thiết bị ${item.SENSOR_ID}`
-              });
-            };
-
-            // Trong FlatList renderItem:
             if (activeTab === 'DEVICE') {
-              return (
-                <SensorItem 
-                  item={item} 
-                  index={index} 
-                  onRename={onRename} 
-                  onRemove={onRemove} 
-                  onPress={() => handlePressSensor(item)} // Nên bọc arrow function ở đây
-                />
-              );
+              return <SensorItem item={item} index={index} onRefresh={() => fetchSensors(selectedHouse.HOME_ID)} onRename={onRename} onRemove={onRemove} onPress={() => handlePressSensor(item)} />;
             }
-            return <LinkItem item={item} onClear={onClearLink} />;
+            return <LinkItem item={item} onClear={() => {
+              const gwId = item.GATEWAY_ID;
+              Alert.alert("Xóa lịch sử", "Xóa toàn bộ liên gia của Gateway này?", [
+                { text: "Hủy" },
+                { text: "Xóa", style: 'destructive', onPress: async () => {
+                    const res = await clearLinkGatewayStatus(gwId);
+                    if (res.CODE === 1) fetchLinks(selectedHouse.HOME_ID);
+                }}
+              ]);
+            }} />;
           }}
           ListEmptyComponent={
             <View style={{ alignItems: 'center', marginTop: 40 }}>
               <RNText style={{ color: '#9CA3AF' }}>Không có dữ liệu</RNText>
             </View>
           }
-          contentContainerStyle={{ paddingBottom: 20 }}
+          contentContainerStyle={{ paddingBottom: 100 }}
         />
       )}
     </SafeAreaView>

@@ -149,7 +149,7 @@ const AppNavigator = () => {
               <Stack.Screen name="MainTabs" component={MainTabNavigator} screenOptions={{ animationEnabled: true }} />
               
               <Stack.Screen name="HistoryGateway" component={HistoryGatewayScreen} />
-              <Stack.Screen name="HistorySensor" component={HistorySensorScreen} />
+              
 
               {/* 3. DÙNG t() CHO TITLE */}
               <Stack.Screen 
@@ -215,6 +215,10 @@ const AppNavigator = () => {
                   headerShown: false 
                 }} 
               />
+              <Stack.Screen name="HistorySensor"
+               component={HistorySensorScreen} 
+               options={{ ...commonHeaderOptions, 
+                headerShown: false }} />
             </>
           )}
         </Stack.Navigator>

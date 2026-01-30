@@ -55,12 +55,20 @@ class MqttProtocol {
           try {
             const json = JSON.parse(msg.data);
             
-            // --- SỬA TẠI ĐÂY: So sánh với biến msgId vừa tạo ---
+            // Kiểm tra tin nhắn phản hồi (ACK)
             if (json.type === 'ACK' && json.data?.msgId === msgId) {
-              console.log(`🎯 [MQTT] Khớp ACK thành công cho lệnh ${command} (${msgId})`);
               clearTimeout(timeout);
-              this.cleanup();
-              resolve(json);
+              const result = json.data?.result;
+
+              if (result === 1) {
+                console.log(`✅ [MQTT] Gateway xử lý THÀNH CÔNG lệnh ${command} (${msgId})`);
+                this.cleanup();
+                resolve({ status: 'success', data: json.data });
+              } else {
+                console.log(`❌ [MQTT] Gateway xử lý THẤT BẠI lệnh ${command} (${msgId})`);
+                this.cleanup();
+                resolve({ status: 'failure', data: json.data });
+              }
             }
           } catch (e) {
             console.log('[MQTT] Error parsing JSON', e);
